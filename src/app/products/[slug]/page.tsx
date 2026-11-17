@@ -1,12 +1,13 @@
 import { notFound } from "next/navigation";
 import { safePublicRead } from "@/lib/safe-data";
+import { PUBLIC_PRODUCT_COLUMNS } from "@/lib/public-catalog";
 import { BuyButton } from "@/components/buy-button";
 
 export const dynamic = "force-dynamic";
 export default async function ProductDetail({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const product = await safePublicRead(
-    (db) => db.from("products").select("*").eq("slug", slug).eq("status", "approved").single().then((r) => r.data ?? null),
+    (db) => db.from("products").select(PUBLIC_PRODUCT_COLUMNS).eq("slug", slug).eq("status", "approved").single().then((r) => r.data ?? null),
     null,
   );
   if (!product) notFound();

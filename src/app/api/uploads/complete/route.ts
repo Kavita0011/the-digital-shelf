@@ -35,7 +35,8 @@ export const POST = route(async (req: NextRequest) => {
   const body = bodySchema.parse(await req.json());
 
   const db = getSupabaseAdmin();
-  const { data: file } = await db.from("product_files").select("*").eq("id", body.fileId).single();
+  const { data: file } = await db.from("product_files")
+    .select("product_id,scan_status,storage_path,mime_type,checksum").eq("id", body.fileId).single();
   if (!file || file.product_id !== body.productId) throw new HttpError(404, "Upload record not found", "not_found");
   if (file.scan_status !== "pending") throw new HttpError(409, "This upload has already been processed", "invalid_state");
 

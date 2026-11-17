@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { safePublicRead } from "@/lib/safe-data";
+import { PUBLIC_CATEGORY_COLUMNS } from "@/lib/public-catalog";
 export const dynamic = "force-dynamic";
 export default async function CategoriesPage() {
   const data = await safePublicRead(
-    (db) => db.from("categories").select("*").order("name").then((r) => r.data ?? []),
+    (db) => db.from("categories").select(PUBLIC_CATEGORY_COLUMNS).order("name").then((r) => r.data ?? []),
     [],
   );
   return (
