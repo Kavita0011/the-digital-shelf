@@ -1,4 +1,5 @@
 import { safePublicRead } from "@/lib/safe-data";
+import { buildIlikeFilter } from "@/lib/search";
 import { ProductCard } from "@/components/product-card";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       .select("id,title,slug,short_description,price,currency,preview_image_url")
       .eq("status", "approved").order("created_at", { ascending: false }).limit(48);
     if (params.category) q = q.eq("category_id", params.category);
-    if (params.q) q = q.or(`title.ilike.%${params.q.slice(0, 80)}%,short_description.ilike.%${params.q.slice(0, 80)}%`);
+    if (params.q?.trim()) q = q.or(buildIlikeFilter(params.q, "title", "short_description", 80));
     return q.then((r) => r.data ?? []);
   }, []);
   return (
