@@ -5,7 +5,7 @@ import { ok, route } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { rateLimitByIp, rateLimit } from "@/lib/rate-limit";
 import { assertCsrf } from "@/lib/csrf";
-import { requestIp } from "@/lib/auth";
+import { HttpError, requestIp } from "@/lib/auth";
 
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
@@ -17,13 +17,18 @@ export const POST = route(async (req: NextRequest) => {
   const { data, error } = await supabase.auth.signUp({
     email: body.email,
     password: body.password,
-    options: { data: { full_name: body.fullName, role: body.role } },
+    options: { data: { full_name: body.fullName } },
   });
-  if (error) throw new Error(error.message);
-  if (!data.user) throw new Error("Could not create account");
+  if (error) throw new HttpError(400, error.message, "registration_failed");
+  if (!data.user) throw new HttpError(400, "Could not create account", "registration_failed");
 
-  // Public.users row is created by handle_new_user() trigger with requested role.
+  // handle_new_user() always creates a buyer (roles are never trusted from
+  // signup metadata). Promote seller accounts here, using the service role,
+  // after validating the role with Zod. Admin roles cannot be self-assigned.
   if (body.role === "seller") {
+    const { error: roleError } = await getSupabaseAdmin().from("users")
+      .update({ role: "seller" }).eq("id", data.user.id);
+    if (roleError) throw roleError;
     await getSupabaseAdmin().from("seller_profiles").insert({
       user_id: data.user.id,
       store_name: `${body.fullName}'s Store`,

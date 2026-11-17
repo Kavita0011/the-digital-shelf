@@ -11,7 +11,8 @@ export const GET = route(async () => {
     db.from("users").select("id", { count: "exact", head: true }).eq("role", "buyer"),
     db.from("products").select("id", { count: "exact", head: true }).eq("status", "approved"),
     db.from("products").select("id", { count: "exact", head: true }).eq("status", "pending_review"),
-    db.from("orders").select("total_paid,platform_commission"),
+    db.from("orders").select("total_paid,platform_commission")
+      .in("payment_status", ["paid", "partially_refunded", "refunded"]),
     db.from("refunds").select("amount", { count: "exact", head: true }),
     db.from("disputes").select("id", { count: "exact", head: true }).in("status", ["needs_response", "under_review"]),
     db.from("credit_wallets").select("balance"),

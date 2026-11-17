@@ -6,8 +6,14 @@ import { HttpError } from "./auth";
 const COOKIE_NAME = "ds_csrf";
 const HEADER_NAME = "x-csrf-token";
 
+function sessionSecret(): string {
+  const secret = requireEnv("SESSION_SECRET");
+  if (secret.length < 32) throw new Error("SESSION_SECRET must be at least 32 characters");
+  return secret;
+}
+
 function sign(token: string): string {
-  return createHmac("sha256", requireEnv("SESSION_SECRET")).update(token).digest("hex");
+  return createHmac("sha256", sessionSecret()).update(token).digest("hex");
 }
 
 export function newCsrfToken(): { token: string; cookie: string } {
@@ -37,6 +43,22 @@ export function assertCsrf(req: NextRequest): void {
   if (!cookieToken || !headerToken || cookieToken !== headerToken) {
     throw new HttpError(403, "Invalid CSRF token", "csrf_failed");
   }
+}
+
+/** Issue a fresh CSRF cookie after an authentication state change. */
+export function csrfCookieOptions() {
+  const { cookie } = newCsrfToken();
+  return {
+    name: COOKIE_NAME,
+    value: cookie,
+    options: {
+      httpOnly: true,
+      sameSite: "lax" as const,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    },
+  };
 }
 
 export const CSRF_COOKIE_NAME = COOKIE_NAME;

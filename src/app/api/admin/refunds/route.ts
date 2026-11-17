@@ -15,6 +15,15 @@ const schema = z.object({
   restoreCredits: z.boolean().default(true),
 });
 
+export const GET = route(async () => {
+  await requireRole("admin");
+  const { data, error } = await getSupabaseAdmin().from("refunds")
+    .select("id,order_id,payment_id,amount,reason,status,stripe_refund_id,created_at")
+    .order("created_at", { ascending: false }).limit(500);
+  if (error) throw error;
+  return ok(data);
+});
+
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
   const admin = await requireRole("admin");
@@ -25,8 +34,16 @@ export const POST = route(async (req: NextRequest) => {
   if (!["paid", "partially_refunded"].includes(String(order.payment_status))) {
     throw new HttpError(409, "Order is not refundable", "not_refundable");
   }
-  const amount = body.amount ?? order.total_paid;
-  if (amount > order.total_paid) throw new HttpError(400, "Refund exceeds order total", "invalid_amount");
+
+  // Prevent repeat refunds beyond the amount actually still outstanding.
+  const { data: priorRefunds } = await db.from("refunds")
+    .select("amount").eq("order_id", order.id).eq("status", "succeeded");
+  const alreadyRefunded = (priorRefunds ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
+  const remaining = Math.max(0, Number(order.total_paid) - alreadyRefunded);
+  const amount = body.amount ?? remaining;
+  if (amount <= 0 || amount > remaining) {
+    throw new HttpError(400, "Refund exceeds the outstanding order amount", "invalid_amount");
+  }
 
   let stripeRefundId: string | null = null;
   if (order.stripe_payment_intent_id) {
@@ -35,20 +52,23 @@ export const POST = route(async (req: NextRequest) => {
       amount,
       reason: "requested_by_customer",
       metadata: { order_id: order.id, admin_id: admin.id },
-    });
+    }, { idempotencyKey: `order-refund-${order.id}-${alreadyRefunded}-${amount}` });
     stripeRefundId = refund.id;
   }
 
-  await db.from("refunds").insert({
+  const { error: refundError } = await db.from("refunds").insert({
     order_id: order.id, amount, reason: body.reason,
     status: "succeeded", stripe_refund_id: stripeRefundId, admin_id: admin.id,
   });
-  await db.from("orders").update({
-    payment_status: amount === order.total_paid ? "refunded" : "partially_refunded",
-  }).eq("id", order.id);
+  if (refundError) throw refundError;
 
-  // Reverse seller earnings/commission ledger via payments record; credits are
-  // restored only when they were actually used on this order.
+  const fullyRefunded = remaining - amount === 0;
+  const { error: orderError } = await db.from("orders").update({
+    payment_status: fullyRefunded ? "refunded" : "partially_refunded",
+    total_paid: remaining - amount,
+  }).eq("id", order.id);
+  if (orderError) throw orderError;
+
   if (body.restoreCredits && order.credits_used > 0) {
     await addCreditTransaction({
       userId: order.buyer_id, amount: Number(order.credits_used), type: "refund",

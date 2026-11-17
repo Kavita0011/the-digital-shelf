@@ -23,8 +23,11 @@ export async function transitionProduct(
     update.approved_at = new Date().toISOString();
     update.approved_by = admin.id;
     update.rejection_reason = null;
-    if (product.status !== "pending_review") {
-      throw new HttpError(409, "Only pending-review products can be approved", "invalid_transition");
+    // Approval is a manual moderation decision. It may be applied to a fresh
+    // submission or to a product being restored from hidden/removed/rejected,
+    // but never to an already approved product.
+    if (!["pending_review", "hidden", "removed", "rejected"].includes(product.status)) {
+      throw new HttpError(409, "This product cannot be approved from its current state", "invalid_transition");
     }
     const { data: file } = await db.from("product_files").select("scan_status").eq("id", (await db.from("products").select("file_id").eq("id", productId).single()).data?.file_id ?? "").single();
     if (file && file.scan_status !== "clean") throw new HttpError(409, "Cannot approve a product that failed malware scanning", "scan_not_clean");

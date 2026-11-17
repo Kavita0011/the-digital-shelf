@@ -1,7 +1,9 @@
+import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 export default async function SellerDashboard() {
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
   const db = getSupabaseAdmin();
   const { data: seller } = await db.from("seller_profiles").select("id,upload_limit,verification_status").eq("user_id", user!.id).single();
   const { data: products } = await db.from("products").select("status").eq("seller_id", seller?.id ?? "");

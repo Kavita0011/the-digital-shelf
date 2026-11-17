@@ -9,6 +9,9 @@ import { addCreditTransaction } from "@/lib/credits";
 
 export const runtime = "nodejs";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (value: unknown): value is string => typeof value === "string" && UUID_RE.test(value);
+
 /** Stripe webhook: raw body + signature verification, idempotent via webhook_events. */
 export const POST = async (req: NextRequest) => {
   const signature = req.headers.get("stripe-signature");
@@ -23,57 +26,89 @@ export const POST = async (req: NextRequest) => {
   }
 
   const db = getSupabaseAdmin();
-  const { error: dupe } = await db.from("webhook_events").insert({
-    stripe_event_id: event.id, event_type: event.type, payload: event as never,
-  });
-  if (dupe) return NextResponse.json({ received: true, duplicate: true });
+  // Pre-check duplicates, but only record the event AFTER successful handling.
+  // Recording it first permanently swallows failed events when Stripe retries.
+  const { data: existing } = await db.from("webhook_events")
+    .select("id").eq("stripe_event_id", event.id).maybeSingle();
+  if (existing) return NextResponse.json({ received: true, duplicate: true });
 
   try {
     switch (event.type) {
       case "checkout.session.completed":
       case "checkout.session.async_payment_succeeded": {
         const session = event.data.object as Stripe.Checkout.Session;
-        if (session.metadata?.type === "credit_purchase" && session.metadata?.userId) {
+        const pi = typeof session.payment_intent === "string" ? session.payment_intent : null;
+
+        // Credit packs: trust only the verified amount, never metadata alone.
+        if (session.metadata?.type === "credit_purchase") {
+          if (session.payment_status !== "paid") break;
+          const userId = session.metadata.userId;
           const credits = Number(session.metadata.credits ?? 0);
+          const amount = session.amount_total ?? 0;
+          if (!isUuid(userId) || credits <= 0 || amount < credits) {
+            console.error("Rejecting inconsistent credit purchase webhook", { event: event.id });
+            break;
+          }
+          const { data: payment, error: paymentError } = await db.from("payments").insert({
+            user_id: userId,
+            payment_method: "stripe_card",
+            amount,
+            currency: session.currency ?? "usd",
+            status: "succeeded",
+            stripe_payment_intent_id: pi,
+          }).select().single();
+          if (paymentError) throw paymentError;
           await addCreditTransaction({
-            userId: session.metadata.userId,
-            amount: credits,
-            type: "purchase",
-            paymentId: typeof session.payment_intent === "string" ? session.payment_intent : null,
+            userId, amount: credits, type: "purchase", paymentId: payment.id,
             reason: "Purchased credit pack",
+          });
+          await audit({
+            actorId: null, actorRole: "anonymous", action: "credits.purchased",
+            targetType: "user", targetId: userId, metadata: { eventId: event.id, amount, credits },
           });
           break;
         }
 
-        const orderIds = (session.metadata?.orderIds ?? "").split(",").filter(Boolean);
-        const creditsUsed = Number(session.metadata?.creditsUsed ?? 0);
-        const pi = typeof session.payment_intent === "string" ? session.payment_intent : null;
-        for (const orderId of orderIds) {
-          await db.from("orders").update({
-            payment_status: "paid",
-            paid_at: new Date().toISOString(),
+        // Asynchronous methods fire completed with payment_status=unpaid;
+        // fulfillment waits for async_payment_succeeded.
+        if (session.payment_status !== "paid") break;
+        const orderIds = (session.metadata?.orderIds ?? "").split(",").filter(isUuid);
+        const buyerId = session.metadata?.buyerId;
+        if (!isUuid(buyerId) || orderIds.length === 0) break;
+
+        const { data: orders } = await db.from("orders")
+          .select("id,buyer_id,credits_used,total_paid,payment_status")
+          .in("id", orderIds);
+        for (const order of orders ?? []) {
+          if (order.payment_status === "paid") continue; // already fulfilled
+          const { error: paidError } = await db.from("orders").update({
+            payment_status: "paid", paid_at: new Date().toISOString(),
             stripe_payment_intent_id: pi,
-          }).eq("id", orderId);
-          await db.from("payments").insert({
-            order_id: orderId,
-            user_id: session.metadata?.buyerId ?? null,
+          }).eq("id", order.id);
+          if (paidError) throw paidError;
+
+          const { error: paymentError } = await db.from("payments").insert({
+            order_id: order.id,
+            user_id: order.buyer_id ?? buyerId,
             payment_method: "stripe_card",
-            amount: session.amount_total ?? 0,
+            amount: order.total_paid,
             currency: session.currency ?? "usd",
-            credits_used: creditsUsed,
+            credits_used: order.credits_used ?? 0,
             status: "succeeded",
             stripe_payment_intent_id: pi,
             receipt_url: (session as unknown as { receipt_url?: string }).receipt_url ?? null,
           });
-        }
-        if (creditsUsed > 0 && session.metadata?.buyerId) {
-          await addCreditTransaction({
-            userId: session.metadata.buyerId,
-            amount: -creditsUsed,
-            type: "purchase",
-            orderId: orderIds[0] ?? null,
-            reason: "Credits used at checkout",
-          });
+          if (paymentError) throw paymentError;
+
+          if ((order.credits_used ?? 0) > 0) {
+            const { error: redeemError } = await db.rpc("redeem_credits", {
+              p_user_id: order.buyer_id ?? buyerId,
+              p_amount: order.credits_used,
+              p_order_id: order.id,
+              p_reason: "Credits used at checkout",
+            });
+            if (redeemError) throw redeemError;
+          }
         }
         await audit({
           actorId: null, actorRole: "anonymous", action: "payment.succeeded",
@@ -86,18 +121,50 @@ export const POST = async (req: NextRequest) => {
       case "payment_intent.payment_failed": {
         const obj = event.data.object as { id: string; metadata?: Record<string, string> };
         const pi = event.type === "payment_intent.payment_failed" ? obj.id : null;
-        const orderIds = (obj.metadata?.orderIds ?? "").split(",").filter(Boolean);
-        for (const id of orderIds) await db.from("orders").update({ payment_status: "failed" }).eq("id", id);
+        const orderIds = (obj.metadata?.orderIds ?? "").split(",").filter(isUuid);
+        for (const id of orderIds) {
+          await db.from("orders").update({ payment_status: "failed" })
+            .eq("id", id).eq("payment_status", "pending");
+        }
         if (pi) await db.from("payments").update({ status: "failed" }).eq("stripe_payment_intent_id", pi);
         break;
       }
       case "charge.refunded": {
         const charge = event.data.object as Stripe.Charge;
         const pi = typeof charge.payment_intent === "string" ? charge.payment_intent : null;
-        await db.from("orders").update({ payment_status: "refunded" }).eq("stripe_payment_intent_id", pi);
+        const fullyRefunded = charge.amount_refunded >= charge.amount;
+        const { data: orders } = await db.from("orders")
+          .select("id,buyer_id,credits_used,total_paid")
+          .eq("stripe_payment_intent_id", pi);
+        const refundId = charge.refunds?.data?.[0]?.id ?? charge.id;
+        for (const order of orders ?? []) {
+          const amount = Math.max(1, Math.round(order.total_paid * charge.amount_refunded / charge.amount));
+          const { data: recorded } = await db.from("refunds")
+            .select("id,amount").eq("order_id", order.id).eq("status", "succeeded");
+          const alreadyRecorded = (recorded ?? []).some((r) => Number(r.amount) >= amount);
+          if (alreadyRecorded) continue; // admin refund already recorded this
+          await db.from("orders").update({
+            payment_status: fullyRefunded ? "refunded" : "partially_refunded",
+          }).eq("id", order.id);
+          await db.from("payments").update({
+            status: fullyRefunded ? "refunded" : "partially_refunded",
+          }).eq("stripe_payment_intent_id", pi);
+          const { error: refundError } = await db.from("refunds").insert({
+            order_id: order.id, amount, reason: "Stripe refund",
+            status: "succeeded", stripe_refund_id: `${refundId}-${order.id}`,
+          });
+          if (refundError) throw refundError;
+          if ((order.credits_used ?? 0) > 0) {
+            await addCreditTransaction({
+              userId: order.buyer_id, amount: order.credits_used, type: "refund",
+              orderId: order.id, reason: "Credits restored after refund",
+            });
+          }
+        }
         await audit({
           actorId: null, actorRole: "anonymous", action: "payment.refunded",
-          targetType: "payment", targetId: pi, metadata: { eventId: event.id },
+          targetType: "payment", targetId: pi,
+          metadata: { eventId: event.id, amount: charge.amount_refunded, full: fullyRefunded },
         });
         break;
       }
@@ -108,11 +175,8 @@ export const POST = async (req: NextRequest) => {
         if (order) {
           await db.from("orders").update({ payment_status: "disputed" }).eq("id", order.id);
           await db.from("disputes").insert({
-            order_id: order.id,
-            stripe_dispute_id: dispute.id,
-            amount: dispute.amount,
-            status: dispute.status,
-            reason: dispute.reason ?? null,
+            order_id: order.id, stripe_dispute_id: dispute.id, amount: dispute.amount,
+            status: dispute.status, reason: dispute.reason ?? null,
           });
         }
         break;
@@ -121,8 +185,7 @@ export const POST = async (req: NextRequest) => {
         const payout = event.data.object as Stripe.Payout;
         await audit({
           actorId: null, actorRole: "anonymous", action: "payout.paid",
-          targetType: "payout", targetId: payout.id,
-          metadata: { amount: payout.amount },
+          targetType: "payout", targetId: payout.id, metadata: { amount: payout.amount },
         });
         break;
       }
@@ -132,6 +195,14 @@ export const POST = async (req: NextRequest) => {
   } catch (error) {
     console.error("Webhook processing error", error);
     return NextResponse.json({ error: "Processing failed" }, { status: 500 });
+  }
+
+  const { error: recordError } = await db.from("webhook_events").insert({
+    stripe_event_id: event.id, event_type: event.type, payload: event as never,
+  });
+  if (recordError) {
+    // A concurrent delivery already recorded it; work completed successfully.
+    console.warn("Webhook event already recorded", recordError.message);
   }
   return NextResponse.json({ received: true });
 };

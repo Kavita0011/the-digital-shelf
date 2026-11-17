@@ -34,6 +34,7 @@ Sellers can upload but **never publish directly**: every file is validated by ma
 ├── supabase/
 │   ├── migrations/0001_init.sql      full schema, RLS, append-only triggers
 │   ├── migrations/0002_functions.sql auth sync, credit redemption, token consumption
+│   ├── migrations/0003_security_fixes.sql role whitelist, coupon/freeze RPCs, indexes
 │   └── seed/seed.ts                  demo users, seller, products, audit entry
 ├── .env.example
 ├── package.json
@@ -91,7 +92,7 @@ npm run db:migrate     # supabase db push
 DEMO_PASSWORD='a-strong-demo-password' npm run db:seed
 ```
 
-If you manage migrations manually, apply both SQL files in `supabase/migrations/` in order.
+If you manage migrations manually, apply the SQL files in `supabase/migrations/` in numeric order (`0001`, `0002`, `0003`). `0003_security_fixes.sql` must be applied: it removes client-controlled role assignment from the auth trigger and adds atomic coupon redemption.
 
 ```bash
 npm run dev            # http://localhost:3000

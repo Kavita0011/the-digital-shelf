@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase";
 import { ok, route } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { getCurrentUser, requestIp } from "@/lib/auth";
-import { assertCsrf } from "@/lib/csrf";
+import { assertCsrf, csrfCookieOptions } from "@/lib/csrf";
 
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
@@ -20,5 +20,8 @@ export const POST = route(async (req: NextRequest) => {
       ip: requestIp(req),
     });
   }
-  return ok({ loggedOut: true });
+  const response = ok({ loggedOut: true });
+  const csrf = csrfCookieOptions();
+  response.cookies.set(csrf.name, csrf.value, csrf.options);
+  return response;
 });

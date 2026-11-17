@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { apiFetch } from "@/lib/client-api";
+import Link from "next/link";
+import { apiFetch, clearCsrfTokenCache } from "@/lib/client-api";
 
 export function LoginForm() {
   const [error, setError] = useState("");
@@ -15,6 +16,7 @@ export function LoginForm() {
         body: JSON.stringify({ email: fd.get("email"), password: fd.get("password") }),
       });
       setDone(true);
+      clearCsrfTokenCache();
       window.location.href = "/buyer/dashboard";
     } catch (err) { setError((err as Error).message); }
   }
@@ -22,8 +24,9 @@ export function LoginForm() {
     <form onSubmit={submit} className="card space-y-4 p-6">
       {done && <p className="text-sm text-green-600">Logged in. Redirecting…</p>}
       <div><label className="label">Email</label><input className="input" name="email" type="email" required /></div>
-      <div><label className="label">Password</label><input className="input" name="password" type="password" required /></div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      <div><label className="label">Password</label><input className="input" name="password" type="password" autoComplete="current-password" required /></div>
+      <Link className="block text-sm text-brand-600 hover:underline" href="/forgot-password">Forgot password?</Link>
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       <button className="btn w-full">Log in</button>
     </form>
   );

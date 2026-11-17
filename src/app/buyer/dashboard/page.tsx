@@ -1,9 +1,11 @@
+import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import Link from "next/link";
 
 export default async function BuyerDashboard() {
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
   const db = getSupabaseAdmin();
   const [orders, wallet] = await Promise.all([
     db.from("orders").select("id,order_number,total_paid,payment_status,created_at", { count: "exact" }).eq("buyer_id", user!.id).order("created_at", { ascending: false }).limit(5),

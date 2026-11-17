@@ -18,7 +18,8 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser();
-  if (!authUser) return null;
+  // Unconfirmed signups must not be treated as authenticated users.
+  if (!authUser || !authUser.email_confirmed_at) return null;
 
   const { data: profile } = await getSupabaseAdmin()
     .from("users")
@@ -57,7 +58,24 @@ export function isAdmin(role: Role): boolean {
   return role === "admin" || role === "super_admin";
 }
 
-/** Extract request IP safely (proxy-aware only behind trusted proxy). */
+/** Prevent admins from targeting peers/superiors or themselves. */
+export function assertCanManageUser(actor: AuthenticatedUser, targetId: string, targetRole: Role): void {
+  if (actor.id === targetId) throw new HttpError(403, "You cannot target your own account", "forbidden");
+  if (ROLE_RANK[actor.role] <= ROLE_RANK[targetRole]) {
+    throw new HttpError(403, "You cannot manage a user with equal or higher privileges", "forbidden");
+  }
+}
+
+/**
+ * Extract the client IP using only the last forwarding hop, which is the
+ * address appended by the trusted edge proxy. The first X-Forwarded-For value
+ * is client-controlled and must never be trusted for rate limiting.
+ */
 export function requestIp(req: NextRequest): string | null {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip");
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) {
+    const hops = forwarded.split(",").map((hop) => hop.trim()).filter(Boolean);
+    return hops.length ? hops[hops.length - 1] : null;
+  }
+  return req.headers.get("x-real-ip");
 }

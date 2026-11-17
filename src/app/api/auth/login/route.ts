@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase";
 import { ok, route } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
-import { assertCsrf } from "@/lib/csrf";
+import { assertCsrf, csrfCookieOptions } from "@/lib/csrf";
 import { requestIp } from "@/lib/auth";
 
 export const POST = route(async (req: NextRequest) => {
@@ -12,16 +12,20 @@ export const POST = route(async (req: NextRequest) => {
   const ip = requestIp(req);
   rateLimit(`login:ip:${ip ?? "unknown"}`, 10, 15 * 60 * 1000);
   const { email, password } = loginSchema.parse(await req.json());
+  const accountKey = email.trim().toLowerCase();
+  // Per-account lockout survives IP rotation by an attacker.
+  rateLimit(`login:account:${accountKey}`, 10, 15 * 60 * 1000);
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) {
+    rateLimit(`login:failed:${accountKey}`, 5, 15 * 60 * 1000);
     await audit({
       actorId: null,
       actorRole: "anonymous",
       action: "auth.login_failed",
       targetType: "user",
-      targetId: email,
+      targetId: accountKey,
       ip,
       userAgent: req.headers.get("user-agent"),
     });
@@ -40,5 +44,9 @@ export const POST = route(async (req: NextRequest) => {
     ip,
     userAgent: req.headers.get("user-agent"),
   });
-  return ok({ authenticated: true });
+  // Rotate the CSRF token when privileges change.
+  const response = ok({ authenticated: true });
+  const csrf = csrfCookieOptions();
+  response.cookies.set(csrf.name, csrf.value, csrf.options);
+  return response;
 });
