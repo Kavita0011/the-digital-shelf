@@ -34,7 +34,7 @@ async function main() {
   const sellerUserId = await createUser("seller@example.com", "seller", "Demo Seller");
   const buyerUserId = await createUser("buyer@example.com", "buyer", "Demo Buyer");
   const adminUserId = await createUser("admin@example.com", "admin", "Demo Admin");
-  await createUser("superadmin@example.com", "super_admin", "Demo Super Admin");
+  await createUser("thedigitalshelf.admin@gmail.com", "super_admin", "Demo Super Admin");
 
   const { data: seller } = await admin.from("seller_profiles")
     .upsert({ user_id: sellerUserId, store_name: "Shelf Studio", bio: "Curated templates", verification_status: "approved" }, { onConflict: "user_id" })
