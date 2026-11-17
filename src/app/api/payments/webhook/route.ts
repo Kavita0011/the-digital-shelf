@@ -37,11 +37,14 @@ export const POST = async (req: NextRequest) => {
       case "checkout.session.completed":
       case "checkout.session.async_payment_succeeded": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const pi = typeof session.payment_intent === "string" ? session.payment_intent : null;
+        const pi =
+          typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : (session.payment_intent as { id?: string } | null)?.id ?? null;
 
         // Credit packs: trust only the verified amount, never metadata alone.
         if (session.metadata?.type === "credit_purchase") {
-          if (session.payment_status !== "paid") break;
+          if (session.payment_status !== "paid" || !pi) break;
           const userId = session.metadata.userId;
           const credits = Number(session.metadata.credits ?? 0);
           const amount = session.amount_total ?? 0;
@@ -49,6 +52,13 @@ export const POST = async (req: NextRequest) => {
             console.error("Rejecting inconsistent credit purchase webhook", { event: event.id });
             break;
           }
+          // Only credit the wallet once per payment intent, even if Stripe
+          // redelivers this event after a partial processing failure.
+          const { data: priorPayments } = await db.from("payments")
+            .select("id").is("order_id", null)
+            .eq("stripe_payment_intent_id", pi).limit(1);
+          if (priorPayments?.length) break;
+
           const { data: payment, error: paymentError } = await db.from("payments").insert({
             user_id: userId,
             payment_method: "stripe_card",
@@ -75,31 +85,20 @@ export const POST = async (req: NextRequest) => {
         const orderIds = (session.metadata?.orderIds ?? "").split(",").filter(isUuid);
         const buyerId = session.metadata?.buyerId;
         if (!isUuid(buyerId) || orderIds.length === 0) break;
+        if (!pi) {
+          console.error("Paid checkout is missing a payment intent", { event: event.id });
+          break;
+        }
 
         const { data: orders } = await db.from("orders")
           .select("id,buyer_id,credits_used,total_paid,payment_status")
           .in("id", orderIds);
         for (const order of orders ?? []) {
           if (order.payment_status === "paid") continue; // already fulfilled
-          const { error: paidError } = await db.from("orders").update({
-            payment_status: "paid", paid_at: new Date().toISOString(),
-            stripe_payment_intent_id: pi,
-          }).eq("id", order.id);
-          if (paidError) throw paidError;
 
-          const { error: paymentError } = await db.from("payments").insert({
-            order_id: order.id,
-            user_id: order.buyer_id ?? buyerId,
-            payment_method: "stripe_card",
-            amount: order.total_paid,
-            currency: session.currency ?? "usd",
-            credits_used: order.credits_used ?? 0,
-            status: "succeeded",
-            stripe_payment_intent_id: pi,
-            receipt_url: (session as unknown as { receipt_url?: string }).receipt_url ?? null,
-          });
-          if (paymentError) throw paymentError;
-
+          // Debit credits BEFORE granting paid access. If redemption fails, the
+          // order stays pending so a Stripe retry can complete it; redeem_credits
+          // is idempotent per order, so a repeated delivery never double-charges.
           if ((order.credits_used ?? 0) > 0) {
             const { error: redeemError } = await db.rpc("redeem_credits", {
               p_user_id: order.buyer_id ?? buyerId,
@@ -109,6 +108,31 @@ export const POST = async (req: NextRequest) => {
             });
             if (redeemError) throw redeemError;
           }
+
+          // A prior partial delivery may already have recorded this payment.
+          const { data: existingPayments } = await db.from("payments")
+            .select("id").eq("order_id", order.id)
+            .eq("stripe_payment_intent_id", pi).limit(1);
+          if (!existingPayments?.length) {
+            const { error: paymentError } = await db.from("payments").insert({
+              order_id: order.id,
+              user_id: order.buyer_id ?? buyerId,
+              payment_method: "stripe_card",
+              amount: order.total_paid,
+              currency: session.currency ?? "usd",
+              credits_used: order.credits_used ?? 0,
+              status: "succeeded",
+              stripe_payment_intent_id: pi,
+              receipt_url: (session as unknown as { receipt_url?: string }).receipt_url ?? null,
+            });
+            if (paymentError) throw paymentError;
+          }
+
+          const { error: paidError } = await db.from("orders").update({
+            payment_status: "paid", paid_at: new Date().toISOString(),
+            stripe_payment_intent_id: pi,
+          }).eq("id", order.id);
+          if (paidError) throw paidError;
         }
         await audit({
           actorId: null, actorRole: "anonymous", action: "payment.succeeded",
@@ -131,6 +155,7 @@ export const POST = async (req: NextRequest) => {
       }
       case "charge.refunded": {
         const charge = event.data.object as Stripe.Charge;
+        if (charge.amount <= 0) break; // avoid dividing by zero below
         const pi = typeof charge.payment_intent === "string" ? charge.payment_intent : null;
         const fullyRefunded = charge.amount_refunded >= charge.amount;
         const { data: orders } = await db.from("orders")
