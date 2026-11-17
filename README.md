@@ -35,6 +35,7 @@ Sellers can upload but **never publish directly**: every file is validated by ma
 │   ├── migrations/0001_init.sql      full schema, RLS, append-only triggers
 │   ├── migrations/0002_functions.sql auth sync, credit redemption, token consumption
 │   ├── migrations/0003_security_fixes.sql role whitelist, coupon/freeze RPCs, indexes
+│   ├── migrations/0004_public_column_privileges.sql column-level anon grants
 │   └── seed/seed.ts                  demo users, seller, products, audit entry
 ├── .env.example
 ├── package.json
@@ -92,7 +93,7 @@ npm run db:migrate     # supabase db push
 DEMO_PASSWORD='a-strong-demo-password' npm run db:seed
 ```
 
-If you manage migrations manually, apply the SQL files in `supabase/migrations/` in numeric order (`0001`, `0002`, `0003`). `0003_security_fixes.sql` must be applied: it removes client-controlled role assignment from the auth trigger, adds atomic coupon/credit RPCs, and lets a single payment intent cover a multi-item cart.
+If you manage migrations manually, apply the SQL files in `supabase/migrations/` in numeric order (`0001`–`0004`). `0003_security_fixes.sql` removes client-controlled role assignment from the auth trigger, adds atomic coupon/credit RPCs, and lets a single payment intent cover a multi-item cart. `0004_public_column_privileges.sql` restricts the anon key to public-only product/category columns, so a direct `select=*` REST call cannot read internal fields such as rejection notes or file checksums.
 
 ```bash
 npm run dev            # http://localhost:3000
