@@ -1,13 +1,19 @@
 import { notFound } from "next/navigation";
-import { getSupabaseAdmin } from "@/lib/supabase";
+import { safePublicRead } from "@/lib/safe-data";
 import { BuyButton } from "@/components/buy-button";
 
 export const dynamic = "force-dynamic";
 export default async function ProductDetail({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const { data: product } = await getSupabaseAdmin().from("products").select("*").eq("slug", slug).eq("status", "approved").single();
+  const product = await safePublicRead(
+    (db) => db.from("products").select("*").eq("slug", slug).eq("status", "approved").single().then((r) => r.data ?? null),
+    null,
+  );
   if (!product) notFound();
-  const { data: seller } = await getSupabaseAdmin().from("seller_profiles").select("store_name,bio").eq("id", product.seller_id).single();
+  const seller = await safePublicRead(
+    (db) => db.from("seller_profiles").select("store_name,bio").eq("id", product.seller_id).single().then((r) => r.data ?? null),
+    null,
+  );
   return (
     <div className="container-page grid gap-10 py-12 lg:grid-cols-2">
       <div className="card flex min-h-80 items-center justify-center bg-slate-100">

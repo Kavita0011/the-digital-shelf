@@ -1,16 +1,18 @@
-import { getSupabaseAdmin } from "@/lib/supabase";
-import { ProductCard } from "../page";
+import { safePublicRead } from "@/lib/safe-data";
+import { ProductCard } from "@/components/product-card";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ category?: string; q?: string }> }) {
   const params = await searchParams;
-  let q = getSupabaseAdmin().from("products")
-    .select("id,title,slug,short_description,price,currency,preview_image_url")
-    .eq("status", "approved").order("created_at", { ascending: false }).limit(48);
-  if (params.category) q = q.eq("category_id", params.category);
-  if (params.q) q = q.or(`title.ilike.%${params.q.slice(0, 80)}%,short_description.ilike.%${params.q.slice(0, 80)}%`);
-  const { data } = await q;
+  const data = await safePublicRead((db) => {
+    let q = db.from("products")
+      .select("id,title,slug,short_description,price,currency,preview_image_url")
+      .eq("status", "approved").order("created_at", { ascending: false }).limit(48);
+    if (params.category) q = q.eq("category_id", params.category);
+    if (params.q) q = q.or(`title.ilike.%${params.q.slice(0, 80)}%,short_description.ilike.%${params.q.slice(0, 80)}%`);
+    return q.then((r) => r.data ?? []);
+  }, []);
   return (
     <div className="container-page py-12">
       <h1 className="text-3xl font-bold">{params.q ? `Results for “${params.q}”` : "Browse products"}</h1>

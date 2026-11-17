@@ -1,15 +1,19 @@
 import Link from "next/link";
-import { getSupabaseAdmin } from "@/lib/supabase";
+import { safePublicRead } from "@/lib/safe-data";
+import { ProductCard } from "@/components/product-card";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const { data: products } = await getSupabaseAdmin()
-    .from("products")
-    .select("id,title,slug,short_description,price,currency,preview_image_url")
-    .eq("status", "approved")
-    .order("is_featured", { ascending: false })
-    .limit(8);
+  const products = await safePublicRead(
+    (db) => db.from("products")
+      .select("id,title,slug,short_description,price,currency,preview_image_url")
+      .eq("status", "approved")
+      .order("is_featured", { ascending: false })
+      .limit(8)
+      .then((r) => r.data ?? []),
+    [],
+  );
 
   return (
     <>
@@ -39,25 +43,10 @@ export default async function Home() {
           <Link className="text-sm font-semibold text-brand-600" href="/products">View all →</Link>
         </div>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {(products ?? []).map((p) => <ProductCard key={p.id} product={p} />)}
+          {products.map((p) => <ProductCard key={p.id} product={p} />)}
         </div>
-        {(products ?? []).length === 0 && <p className="text-slate-500">No approved products yet. Run the seed script to add demo data.</p>}
+        {products.length === 0 && <p className="text-slate-500">No approved products yet. Configure your environment and run the seed script to add demo data.</p>}
       </section>
     </>
-  );
-}
-
-export function ProductCard({ product }: { product: Record<string, unknown> }) {
-  return (
-    <Link href={`/products/${product.slug}`} className="card group overflow-hidden transition hover:shadow-md">
-      <div className="flex h-40 items-center justify-center bg-slate-100 text-xs text-slate-400">
-        {product.preview_image_url ? <img src={String(product.preview_image_url)} alt="" className="h-full w-full object-cover" /> : "Preview"}
-      </div>
-      <div className="p-4">
-        <h3 className="font-semibold group-hover:text-brand-600">{String(product.title)}</h3>
-        <p className="mt-1 line-clamp-2 text-sm text-slate-500">{String(product.short_description)}</p>
-        <p className="mt-3 font-bold">${(Number(product.price) / 100).toFixed(2)}</p>
-      </div>
-    </Link>
   );
 }
