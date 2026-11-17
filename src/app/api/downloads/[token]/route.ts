@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireUser, HttpError, requestIp } from "@/lib/auth";
 import { presignDownload } from "@/lib/r2";
+import { downloadTtlSeconds } from "@/lib/downloads";
 import { audit } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -37,8 +38,7 @@ export const GET = async (req: NextRequest, ctx: { params: Promise<{ token: stri
       metadata: { productId: record.product_id }, ip: requestIp(req),
     });
 
-    const ttl = Number(process.env.DOWNLOAD_URL_TTL_SECONDS ?? 600);
-    const url = await presignDownload(String(file.storage_path), ttl);
+    const url = await presignDownload(String(file.storage_path), downloadTtlSeconds());
     return NextResponse.redirect(url, 302);
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500;

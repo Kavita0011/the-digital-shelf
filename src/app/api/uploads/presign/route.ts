@@ -3,7 +3,8 @@ import { z } from "zod";
 import { ok, route } from "@/lib/api";
 import { assertCsrf } from "@/lib/csrf";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { requireUser, requestIp } from "@/lib/auth";
+import { HttpError, requireUser, requestIp } from "@/lib/auth";
+import { ALLOWED_MIME_TYPES } from "@/lib/types";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertSafeFilename, safeStoredName, storagePath } from "@/lib/file-security";
 import { presignUpload } from "@/lib/r2";
@@ -12,7 +13,7 @@ import { audit } from "@/lib/audit";
 const bodySchema = z.object({
   productId: z.string().uuid(),
   originalFilename: z.string().min(1).max(255),
-  mimeType: z.string().min(1).max(120),
+  mimeType: z.enum(ALLOWED_MIME_TYPES),
   size: z.number().int().positive().max(Number(process.env.MAX_UPLOAD_BYTES ?? 104_857_600)),
   checksum: z.string().regex(/^[a-f0-9]{64}$/),
 });
@@ -20,7 +21,7 @@ const bodySchema = z.object({
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
   const user = await requireUser();
-  if (user.role !== "seller") throw new Error("Only sellers can upload products");
+  if (user.role !== "seller") throw new HttpError(403, "Only sellers can upload products", "forbidden");
   rateLimit(`upload:${user.id}`, 20, 60 * 60 * 1000);
 
   const body = bodySchema.parse(await req.json());
@@ -32,11 +33,11 @@ export const POST = route(async (req: NextRequest) => {
     .select("id,status,seller_id")
     .eq("id", body.productId)
     .single();
-  if (!product) throw new Error("Product not found");
+  if (!product) throw new HttpError(404, "Product not found", "not_found");
   const { data: seller } = await getSupabaseAdmin()
     .from("seller_profiles").select("id").eq("user_id", user.id).single();
-  if (!seller || product.seller_id !== seller.id) throw new Error("Forbidden");
-  if (!["draft", "rejected"].includes(product.status)) throw new Error("Product is not editable");
+  if (!seller || product.seller_id !== seller.id) throw new HttpError(403, "Forbidden", "forbidden");
+  if (!["draft", "rejected"].includes(product.status)) throw new HttpError(409, "Product is not editable", "invalid_state");
 
   const storedFilename = safeStoredName(body.originalFilename);
   const path = storagePath(seller.id, storedFilename);

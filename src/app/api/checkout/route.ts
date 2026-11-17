@@ -7,6 +7,7 @@ import { rateLimit, rateLimitByIp } from "@/lib/rate-limit";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { getStripe } from "@/lib/stripe";
 import { getServerEnv } from "@/lib/env";
+import { allocate } from "@/lib/pricing";
 
 const schema = z.object({
   items: z.array(z.object({ productId: z.string().uuid() })).min(1).max(20),
@@ -26,15 +27,6 @@ function safeRedirect(candidate: string | undefined, fallback: string, appUrl: s
     // fall through to the safe default
   }
   return fallback;
-}
-
-/** Split an integer amount across items, giving any rounding remainder to the last item. */
-function allocate(total: number, prices: number[]): number[] {
-  const sum = prices.reduce((a, b) => a + b, 0);
-  if (sum <= 0) return prices.map(() => 0);
-  const out = prices.map((p) => Math.round(total * p / sum));
-  out[out.length - 1] = Math.max(0, total - out.slice(0, -1).reduce((a, b) => a + b, 0));
-  return out;
 }
 
 export const POST = route(async (req: NextRequest) => {

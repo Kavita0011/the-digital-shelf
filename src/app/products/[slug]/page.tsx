@@ -17,7 +17,10 @@ export default async function ProductDetail({ params }: { params: Promise<{ slug
   return (
     <div className="container-page grid gap-10 py-12 lg:grid-cols-2">
       <div className="card flex min-h-80 items-center justify-center bg-slate-100">
-        {product.preview_image_url ? <img src={product.preview_image_url} alt="Preview" className="w-full rounded-2xl object-cover" /> : <span className="text-slate-400">Watermarked preview</span>}
+        {product.preview_image_url
+            ? /* eslint-disable-next-line @next/next/no-img-element -- seller-provided preview URL */
+              <img src={product.preview_image_url} alt={`Preview of ${product.title}`} className="w-full rounded-2xl object-cover" />
+            : <span className="text-slate-400">Watermarked preview</span>}
       </div>
       <div>
         <p className="text-sm text-slate-500">{seller?.store_name}</p>

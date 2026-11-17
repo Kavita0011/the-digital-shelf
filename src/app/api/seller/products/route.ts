@@ -1,5 +1,4 @@
 import type { NextRequest } from "next/server";
-import { z } from "zod";
 import { ok, route } from "@/lib/api";
 import { assertCsrf } from "@/lib/csrf";
 import { requireUser, HttpError } from "@/lib/auth";
@@ -24,7 +23,9 @@ export const GET = route(async () => {
   if (user.role !== "seller") throw new HttpError(403, "Sellers only", "forbidden");
   const seller = await sellerIdFor(user.id);
   const { data, error } = await getSupabaseAdmin()
-    .from("products").select("*").eq("seller_id", seller.id).order("created_at", { ascending: false });
+    .from("products")
+    .select("id,title,slug,status,price,currency,file_format,file_size,created_at")
+    .eq("seller_id", seller.id).order("created_at", { ascending: false });
   if (error) throw error;
   return ok(data);
 });

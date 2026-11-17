@@ -92,7 +92,7 @@ npm run db:migrate     # supabase db push
 DEMO_PASSWORD='a-strong-demo-password' npm run db:seed
 ```
 
-If you manage migrations manually, apply the SQL files in `supabase/migrations/` in numeric order (`0001`, `0002`, `0003`). `0003_security_fixes.sql` must be applied: it removes client-controlled role assignment from the auth trigger and adds atomic coupon redemption.
+If you manage migrations manually, apply the SQL files in `supabase/migrations/` in numeric order (`0001`, `0002`, `0003`). `0003_security_fixes.sql` must be applied: it removes client-controlled role assignment from the auth trigger, adds atomic coupon/credit RPCs, and lets a single payment intent cover a multi-item cart.
 
 ```bash
 npm run dev            # http://localhost:3000
@@ -102,8 +102,12 @@ Verify:
 
 ```bash
 npm run typecheck
+npm run lint
+npm test
 npm run build
 ```
+
+CI runs the same four checks on every push and pull request. It copies `.env.example` to `.env.local` for build-time placeholders only; no real secrets are ever committed.
 
 ---
 

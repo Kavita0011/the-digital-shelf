@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SUPPORT_EMAIL, SUPPORT_EMAIL_HREF } from "@/lib/site";
+import { MobileNav } from "@/components/mobile-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,19 +20,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
+        <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-ink focus:px-4 focus:py-2 focus:text-white">
+          Skip to content
+        </a>
+        <header className="relative border-b border-slate-200 bg-white/90 backdrop-blur">
           <div className="container-page flex h-16 items-center justify-between">
             <Link href="/" className="text-lg font-bold tracking-tight">The Digital Shelf</Link>
-            <nav className="hidden gap-6 text-sm font-medium text-slate-600 md:flex">
+            <nav aria-label="Primary" className="hidden gap-6 text-sm font-medium text-slate-600 md:flex">
               {nav.map((n) => <Link key={n.href} href={n.href} className="hover:text-brand-600">{n.label}</Link>)}
             </nav>
-            <div className="flex gap-2">
+            <div className="hidden gap-2 md:flex">
               <Link href="/login" className="btn-ghost">Log in</Link>
               <Link href="/register" className="btn">Get started</Link>
             </div>
+            <MobileNav />
           </div>
         </header>
-        <main className="min-h-[70vh]">{children}</main>
+        <main id="main" className="min-h-[70vh]">{children}</main>
         <footer className="border-t border-slate-200 bg-white">
           <div className="container-page grid gap-6 py-10 text-sm text-slate-500 sm:grid-cols-4">
             <div><p className="font-semibold text-ink">The Digital Shelf</p><p className="mt-2">Curated digital goods, securely delivered.</p><a className="mt-2 block break-all hover:text-brand-600" href={SUPPORT_EMAIL_HREF}>{SUPPORT_EMAIL}</a></div>

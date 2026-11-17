@@ -5,9 +5,9 @@ import { assertCsrf } from "@/lib/csrf";
 import { requireUser, HttpError } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { inspectFile } from "@/lib/file-security";
+import { assertDeclaredMime, inspectFile } from "@/lib/file-security";
 import { scanFile } from "@/lib/malware";
-import { getObject, objectExists } from "@/lib/r2";
+import { deleteObject, getObject, objectExists } from "@/lib/r2";
 import { audit } from "@/lib/audit";
 
 const bodySchema = z.object({
@@ -17,6 +17,15 @@ const bodySchema = z.object({
   originalFilename: z.string().min(1).max(255),
   expectedChecksum: z.string().regex(/^[a-f0-9]{64}$/),
 });
+
+/** Cleanup must never hide the original rejection reason. */
+async function removeRejectedObject(path: string) {
+  try {
+    await deleteObject(path);
+  } catch (error) {
+    console.error("Failed to delete rejected upload object", error);
+  }
+}
 
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
@@ -28,13 +37,33 @@ export const POST = route(async (req: NextRequest) => {
   const db = getSupabaseAdmin();
   const { data: file } = await db.from("product_files").select("*").eq("id", body.fileId).single();
   if (!file || file.product_id !== body.productId) throw new HttpError(404, "Upload record not found", "not_found");
-  if (!(await objectExists(String(file.storage_path)))) throw new HttpError(400, "Uploaded object missing", "missing_object");
+  if (file.scan_status !== "pending") throw new HttpError(409, "This upload has already been processed", "invalid_state");
+
+  const { data: product } = await db.from("products").select("seller_id").eq("id", body.productId).single();
+  const { data: seller } = await db.from("seller_profiles").select("id").eq("user_id", user.id).single();
+  if (!product || !seller || product.seller_id !== seller.id) throw new HttpError(403, "Forbidden", "forbidden");
+
+  const path = String(file.storage_path);
+  if (!(await objectExists(path))) throw new HttpError(400, "Uploaded object missing", "missing_object");
 
   // Fetch bytes from private R2 storage using the server SDK (never a public URL).
-  const buffer = await getObject(String(file.storage_path));
+  const buffer = await getObject(path);
 
-  const inspected = inspectFile(buffer, body.originalFilename);
+  let inspected;
+  try {
+    inspected = inspectFile(buffer, body.originalFilename);
+    assertDeclaredMime(String(file.mime_type), inspected.detectedMime);
+  } catch (error) {
+    await removeRejectedObject(path);
+    await db.from("product_files").update({ scan_status: "failed", scan_result: { error: String(error) } }).eq("id", body.fileId);
+    await db.from("products").update({ status: "draft", file_id: null }).eq("id", body.productId);
+    throw error;
+  }
+
   if (inspected.checksum !== body.expectedChecksum || inspected.checksum !== file.checksum) {
+    await removeRejectedObject(path);
+    await db.from("product_files").update({ scan_status: "failed", scan_result: { error: "checksum_mismatch" } }).eq("id", body.fileId);
+    await db.from("products").update({ status: "draft", file_id: null }).eq("id", body.productId);
     throw new HttpError(400, "Checksum mismatch — file may have been altered", "checksum_mismatch");
   }
 
@@ -44,6 +73,7 @@ export const POST = route(async (req: NextRequest) => {
   try {
     outcome = await scanFile(buffer, body.originalFilename);
   } catch (error) {
+    await removeRejectedObject(path);
     await db.from("product_files").update({
       scan_status: "failed",
       scan_provider: "virustotal",
@@ -64,8 +94,11 @@ export const POST = route(async (req: NextRequest) => {
   }).eq("id", body.fileId);
 
   if (outcome.status === "infected") {
+    // Never leave a known-malicious object sitting in private storage.
+    await removeRejectedObject(path);
     await db.from("products").update({
       status: "rejected",
+      file_id: null,
       rejection_reason: "Malware detected by automated security scanning.",
     }).eq("id", body.productId);
     await audit({ actorId: user.id, actorRole: user.role, action: "upload.malware_detected", targetType: "product", targetId: body.productId, metadata: outcome.result });

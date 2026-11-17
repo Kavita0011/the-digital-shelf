@@ -3,7 +3,7 @@ import { registerSchema } from "@/lib/validation";
 import { createSupabaseServerClient, getSupabaseAdmin } from "@/lib/supabase";
 import { ok, route } from "@/lib/api";
 import { audit } from "@/lib/audit";
-import { rateLimitByIp, rateLimit } from "@/lib/rate-limit";
+import { rateLimitByIp } from "@/lib/rate-limit";
 import { assertCsrf } from "@/lib/csrf";
 import { HttpError, requestIp } from "@/lib/auth";
 

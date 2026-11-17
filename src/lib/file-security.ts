@@ -55,6 +55,16 @@ function inspectZipOffice(buffer: Buffer): AllowedMimeType | null {
   return "application/zip";
 }
 
+/**
+ * Ensure the MIME declared at presign time matches what the bytes actually
+ * are. Blocks an attacker from presigning as an image and uploading a ZIP.
+ */
+export function assertDeclaredMime(declared: string, detected: AllowedMimeType): void {
+  if (declared !== detected) {
+    throw new HttpError(400, `Declared file type (${declared}) does not match detected content (${detected})`, "mime_mismatch");
+  }
+}
+
 export function assertSafeFilename(originalName: string): void {
   const lower = originalName.toLowerCase();
   if (BLOCKED_EXTENSIONS.some((ext) => lower.endsWith(ext))) {

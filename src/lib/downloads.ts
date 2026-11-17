@@ -3,6 +3,13 @@ import { getSupabaseAdmin } from "./supabase";
 import { HttpError } from "./auth";
 import { audit } from "./audit";
 
+/** Signed URLs stay short-lived even if the deployment env is misconfigured. */
+export function downloadTtlSeconds(): number {
+  const configured = Number(process.env.DOWNLOAD_URL_TTL_SECONDS ?? 600);
+  if (!Number.isFinite(configured)) return 600;
+  return Math.min(3600, Math.max(60, Math.floor(configured)));
+}
+
 /**
  * Issue a purchase-bound download authorization.
  * - Requires a paid order owned by the buyer.
@@ -16,7 +23,8 @@ export async function issueDownloadUrl(
   userAgent: string | null,
 ) {
   const db = getSupabaseAdmin();
-  const { data: order } = await db.from("orders").select("*").eq("id", orderId).eq("buyer_id", userId).single();
+  const { data: order } = await db.from("orders")
+    .select("id,product_id,payment_status").eq("id", orderId).eq("buyer_id", userId).single();
   if (!order) throw new HttpError(404, "Order not found", "not_found");
   if (!["paid", "partially_refunded"].includes(String(order.payment_status))) {
     throw new HttpError(403, "Payment not completed", "payment_required");
@@ -29,15 +37,20 @@ export async function issueDownloadUrl(
   if (!file || file.scan_status !== "clean") throw new HttpError(403, "File not available for download", "file_unavailable");
 
   const existing = await db.from("downloads").select("id,downloaded_at")
-    .eq("order_id", orderId).eq("user_id", userId).order("expires_at", { ascending: false }).limit(1);
+    .eq("order_id", orderId).eq("user_id", userId).order("expires_at", { ascending: false }).limit(20);
   const { data: setting } = await db.from("settings").select("value").eq("key", "allow_repeat_downloads").single();
   const repeatAllowed = setting?.value === true;
   if (existing.data?.[0]?.downloaded_at && !repeatAllowed) {
     throw new HttpError(409, "Download already used for this purchase", "download_limit_reached");
   }
+  // Bound the number of minted tokens so a compromised session cannot grow the
+  // downloads table without limit.
+  if ((existing.data?.length ?? 0) >= 20) {
+    throw new HttpError(429, "Too many download links issued for this order", "download_token_limit");
+  }
 
   const token = randomBytes(32).toString("hex");
-  const ttl = Number(process.env.DOWNLOAD_URL_TTL_SECONDS ?? 600);
+  const ttl = downloadTtlSeconds();
   await db.from("downloads").insert({
     order_id: orderId, user_id: userId, product_id: product.id,
     file_id: product.file_id, download_token: token,

@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element -- preview URLs are seller-provided and not Next Image compatible */
 import Link from "next/link";
 
 export function ProductCard({ product }: { product: Record<string, unknown> }) {
@@ -5,7 +6,7 @@ export function ProductCard({ product }: { product: Record<string, unknown> }) {
     <Link href={`/products/${product.slug}`} className="card group overflow-hidden transition hover:shadow-md">
       <div className="flex h-40 items-center justify-center bg-slate-100 text-xs text-slate-400">
         {product.preview_image_url
-          ? <img src={String(product.preview_image_url)} alt="" className="h-full w-full object-cover" />
+          ? <img src={String(product.preview_image_url)} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
           : "Preview"}
       </div>
       <div className="p-4">

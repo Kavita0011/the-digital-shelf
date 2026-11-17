@@ -2,20 +2,56 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { CSRF_COOKIE_NAME_EDGE, newCsrfTokenEdge } from "@/lib/csrf-edge";
 
-/** Refresh Supabase sessions and set the double-submit CSRF cookie. */
+/** Defense-in-depth response headers applied to every route. */
+function securityHeaders(): Record<string, string> {
+  const isProd = process.env.NODE_ENV === "production";
+  const csp = [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    `connect-src 'self' https://*.supabase.co https://*.stripe.com${isProd ? "" : " ws: wss:"}`,
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self' https://checkout.stripe.com",
+    "object-src 'none'",
+  ].join("; ");
+  return {
+    "content-security-policy": csp,
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=()",
+  };
+}
+
+/** Refresh Supabase sessions, harden cookies, and set the CSRF cookie. */
 export async function middleware(req: NextRequest) {
-  let response = NextResponse.next({ request: { headers: req.headers } });
+  const response = NextResponse.next({ request: { headers: req.headers } });
+  for (const [name, value] of Object.entries(securityHeaders())) {
+    response.headers.set(name, value);
+  }
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) return response;
 
+  const isProd = process.env.NODE_ENV === "production";
   const supabase = createServerClient(url, anon, {
     cookies: {
       getAll() { return req.cookies.getAll(); },
       setAll(cookies: { name: string; value: string; options: CookieOptions }[]) {
         cookies.forEach(({ name, value, options }: { name: string; value: string; options: CookieOptions }) => {
           req.cookies.set(name, value);
-          response.cookies.set(name, value, options);
+          // Never let a supabase helper relax the security properties of the
+          // session cookies, even if library defaults change.
+          response.cookies.set(name, value, {
+            ...options,
+            httpOnly: true,
+            sameSite: "lax",
+            secure: isProd,
+            path: "/",
+          });
         });
       },
     },
@@ -27,13 +63,11 @@ export async function middleware(req: NextRequest) {
     response.cookies.set(CSRF_COOKIE_NAME_EDGE, cookie, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: isProd,
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
     });
   }
-  response.headers.set("x-content-type-options", "nosniff");
-  response.headers.set("x-frame-options", "DENY");
   return response;
 }
 
