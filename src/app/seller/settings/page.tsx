@@ -1,0 +1,1 @@
+export default function SellerSettings(){ return <><h1 className="text-2xl font-bold">Seller settings</h1><p className="mt-4 text-slate-600">Manage your store profile through your seller profile record. Upload limits are configured by admins.</p></>; }

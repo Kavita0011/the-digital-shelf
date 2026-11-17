@@ -1,0 +1,1 @@
+export default function BuyerSettings(){ return <><h1 className="text-2xl font-bold">Settings</h1><p className="mt-4 text-slate-600">Account settings are managed through Supabase Auth. Use the password reset flow to change your password.</p></>; }

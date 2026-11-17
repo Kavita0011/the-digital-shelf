@@ -1,0 +1,26 @@
+import { getSupabaseAdmin } from "@/lib/supabase";
+import { ProductCard } from "../page";
+
+export const dynamic = "force-dynamic";
+
+export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ category?: string; q?: string }> }) {
+  const params = await searchParams;
+  let q = getSupabaseAdmin().from("products")
+    .select("id,title,slug,short_description,price,currency,preview_image_url")
+    .eq("status", "approved").order("created_at", { ascending: false }).limit(48);
+  if (params.category) q = q.eq("category_id", params.category);
+  if (params.q) q = q.or(`title.ilike.%${params.q.slice(0, 80)}%,short_description.ilike.%${params.q.slice(0, 80)}%`);
+  const { data } = await q;
+  return (
+    <div className="container-page py-12">
+      <h1 className="text-3xl font-bold">{params.q ? `Results for “${params.q}”` : "Browse products"}</h1>
+      <form className="mt-6 flex gap-2" action="/products">
+        <input className="input max-w-md" name="q" placeholder="Search templates, planners, ebooks…" defaultValue={params.q} />
+        <button className="btn" type="submit">Search</button>
+      </form>
+      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {(data ?? []).map((p) => <ProductCard key={p.id} product={p} />)}
+      </div>
+    </div>
+  );
+}
