@@ -9,7 +9,7 @@ import { requestIp, HttpError } from "@/lib/auth";
 
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
-  rateLimitByIp(requestIp(req), "reset", 5, 15 * 60 * 1000);
+  await rateLimitByIp(requestIp(req), "reset", 5, 15 * 60 * 1000);
   const { tokenHash, newPassword } = z.object({
     tokenHash: z.string().min(10).max(500),
     newPassword: password,

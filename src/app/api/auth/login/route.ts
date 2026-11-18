@@ -10,16 +10,16 @@ import { requestIp } from "@/lib/auth";
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
   const ip = requestIp(req);
-  rateLimit(`login:ip:${ip ?? "unknown"}`, 10, 15 * 60 * 1000);
+  await rateLimit(`login:ip:${ip ?? "unknown"}`, 10, 15 * 60 * 1000);
   const { email, password } = loginSchema.parse(await req.json());
   const accountKey = email.trim().toLowerCase();
   // Per-account lockout survives IP rotation by an attacker.
-  rateLimit(`login:account:${accountKey}`, 10, 15 * 60 * 1000);
+  await rateLimit(`login:account:${accountKey}`, 10, 15 * 60 * 1000);
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) {
-    rateLimit(`login:failed:${accountKey}`, 5, 15 * 60 * 1000);
+    await rateLimit(`login:failed:${accountKey}`, 5, 15 * 60 * 1000);
     await audit({
       actorId: null,
       actorRole: "anonymous",

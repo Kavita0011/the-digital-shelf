@@ -34,7 +34,7 @@ export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
   const user = await requireUser();
   if (user.role !== "seller") throw new HttpError(403, "Sellers only", "forbidden");
-  rateLimit(`product-create:${user.id}`, 15, 60 * 60 * 1000);
+  await rateLimit(`product-create:${user.id}`, 15, 60 * 60 * 1000);
   const body = productDraftSchema.parse(await req.json());
   const seller = await sellerIdFor(user.id);
 

@@ -10,7 +10,7 @@ import { getServerEnv } from "@/lib/env";
 
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
-  rateLimitByIp(requestIp(req), "forgot", 5, 15 * 60 * 1000);
+  await rateLimitByIp(requestIp(req), "forgot", 5, 15 * 60 * 1000);
   const body = z.object({ email, redirectTo: z.string().url().optional() }).parse(await req.json());
   const appUrl = getServerEnv().NEXT_PUBLIC_APP_URL;
   let redirectTo = `${appUrl}/reset-password`;

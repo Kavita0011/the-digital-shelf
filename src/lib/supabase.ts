@@ -1,7 +1,8 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { getServerEnv } from "./env";
+
+export { getSupabaseAdmin } from "./admin-db";
 
 /**
  * Server-side Supabase client bound to the user's session cookies.
@@ -25,15 +26,4 @@ export async function createSupabaseServerClient() {
       },
     },
   });
-}
-
-/** Service-role client. SERVER ONLY. Bypasses RLS. Never import in client code. */
-let adminClient: SupabaseClient | null = null;
-export function getSupabaseAdmin(): SupabaseClient {
-  if (adminClient) return adminClient;
-  const env = getServerEnv();
-  adminClient = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-  return adminClient;
 }

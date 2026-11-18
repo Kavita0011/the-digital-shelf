@@ -111,6 +111,7 @@ export interface ProductFile {
   file_size: number;
   checksum: string;
   scan_status: ScanStatus;
+  scan_analysis_id: string | null;
   scan_provider: string | null;
   scan_result: Record<string, unknown> | null;
   uploaded_at: string;

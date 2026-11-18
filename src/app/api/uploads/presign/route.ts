@@ -14,7 +14,7 @@ const bodySchema = z.object({
   productId: z.string().uuid(),
   originalFilename: z.string().min(1).max(255),
   mimeType: z.enum(ALLOWED_MIME_TYPES),
-  size: z.number().int().positive().max(Number(process.env.MAX_UPLOAD_BYTES ?? 104_857_600)),
+  size: z.number().int().positive().max(Number(process.env.MAX_UPLOAD_BYTES ?? 26_214_400)),
   checksum: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
@@ -22,7 +22,7 @@ export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
   const user = await requireUser();
   if (user.role !== "seller") throw new HttpError(403, "Only sellers can upload products", "forbidden");
-  rateLimit(`upload:${user.id}`, 20, 60 * 60 * 1000);
+  await rateLimit(`upload:${user.id}`, 20, 60 * 60 * 1000);
 
   const body = bodySchema.parse(await req.json());
   assertSafeFilename(body.originalFilename);

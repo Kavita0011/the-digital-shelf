@@ -16,7 +16,7 @@ const schema = z.object({
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
   const user = await requireUser();
-  rateLimit(`report:${user.id}`, 10, 60 * 60 * 1000);
+  await rateLimit(`report:${user.id}`, 10, 60 * 60 * 1000);
   const body = schema.parse(await req.json());
   const { data, error } = await getSupabaseAdmin().from("product_reports").insert({
     product_id: body.productId, reporter_id: user.id, reason: body.reason, details: body.details,

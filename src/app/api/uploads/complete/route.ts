@@ -6,7 +6,8 @@ import { requireUser, HttpError } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { assertDeclaredMime, inspectFile } from "@/lib/file-security";
-import { scanFile } from "@/lib/malware";
+import { startScan, pollScan, type ScanOutcome } from "@/lib/malware";
+import { enqueueScan } from "@/lib/queue";
 import { deleteObject, getObject, objectExists } from "@/lib/r2";
 import { audit } from "@/lib/audit";
 
@@ -18,6 +19,16 @@ const bodySchema = z.object({
   expectedChecksum: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
+interface UploadContext {
+  productId: string;
+  fileId: string;
+  path: string;
+  originalFilename: string;
+  analysisId: string;
+  actorId: string;
+  actorRole: "seller";
+}
+
 /** Cleanup must never hide the original rejection reason. */
 async function removeRejectedObject(path: string) {
   try {
@@ -27,11 +38,71 @@ async function removeRejectedObject(path: string) {
   }
 }
 
+async function failScan(ctx: UploadContext, error: unknown) {
+  const db = getSupabaseAdmin();
+  await removeRejectedObject(ctx.path);
+  await db.from("product_files").update({
+    scan_status: "failed",
+    scan_provider: "virustotal",
+    scan_result: { error: String(error), analysisId: ctx.analysisId },
+  }).eq("id", ctx.fileId);
+  await db.from("products").update({
+    status: "rejected",
+    file_id: null,
+    rejection_reason: "Automated malware scanning failed. Please contact support.",
+  }).eq("id", ctx.productId);
+  await audit({
+    actorId: ctx.actorId,
+    actorRole: ctx.actorRole,
+    action: "upload.scan_failed",
+    targetType: "product",
+    targetId: ctx.productId,
+    metadata: { analysisId: ctx.analysisId, error: String(error) },
+  });
+}
+
+async function applyOutcome(ctx: UploadContext, outcome: ScanOutcome) {
+  const db = getSupabaseAdmin();
+  await db.from("product_files").update({
+    scan_status: outcome.status,
+    scan_provider: outcome.provider,
+    scan_result: outcome.result,
+  }).eq("id", ctx.fileId);
+
+  if (outcome.status === "infected") {
+    await removeRejectedObject(ctx.path);
+    await db.from("products").update({
+      status: "rejected",
+      file_id: null,
+      rejection_reason: "Malware detected by automated security scanning.",
+    }).eq("id", ctx.productId);
+    await audit({
+      actorId: ctx.actorId,
+      actorRole: ctx.actorRole,
+      action: "upload.malware_detected",
+      targetType: "product",
+      targetId: ctx.productId,
+      metadata: outcome.result,
+    });
+    throw new HttpError(422, "Malware detected; product rejected", "malware_detected");
+  }
+
+  // Scan passed: seller still cannot publish. Admin review is mandatory.
+  await db.from("products").update({ status: "pending_review" }).eq("id", ctx.productId);
+  await audit({
+    actorId: ctx.actorId,
+    actorRole: ctx.actorRole,
+    action: "upload.scan_clean",
+    targetType: "product",
+    targetId: ctx.productId,
+  });
+}
+
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
   const user = await requireUser();
   if (user.role !== "seller") throw new HttpError(403, "Sellers only", "forbidden");
-  rateLimit(`upload-complete:${user.id}`, 20, 60 * 60 * 1000);
+  await rateLimit(`upload-complete:${user.id}`, 20, 60 * 60 * 1000);
   const body = bodySchema.parse(await req.json());
 
   const db = getSupabaseAdmin();
@@ -70,44 +141,63 @@ export const POST = route(async (req: NextRequest) => {
 
   await db.from("products").update({ status: "scanning" }).eq("id", body.productId);
 
-  let outcome;
+  const ctx: UploadContext = {
+    productId: body.productId,
+    fileId: body.fileId,
+    path,
+    originalFilename: body.originalFilename,
+    analysisId: "",
+    actorId: user.id,
+    actorRole: "seller",
+  };
+
+  let analysisId: string;
   try {
-    outcome = await scanFile(buffer, body.originalFilename);
+    analysisId = await startScan(buffer, body.originalFilename);
   } catch (error) {
-    await removeRejectedObject(path);
-    await db.from("product_files").update({
-      scan_status: "failed",
-      scan_provider: "virustotal",
-      scan_result: { error: String(error) },
-    }).eq("id", body.fileId);
-    await db.from("products").update({
-      status: "rejected",
-      rejection_reason: "Automated malware scanning failed. Please contact support.",
-    }).eq("id", body.productId);
-    await audit({ actorId: user.id, actorRole: user.role, action: "upload.scan_failed", targetType: "product", targetId: body.productId });
+    await failScan({ ...ctx, analysisId: "start_failed" }, error);
     throw new HttpError(422, "Malware scanning failed; product rejected", "scan_failed");
   }
+  ctx.analysisId = analysisId;
 
   await db.from("product_files").update({
-    scan_status: outcome.status,
-    scan_provider: outcome.provider,
-    scan_result: outcome.result,
+    scan_status: "scanning",
+    scan_provider: "virustotal",
+    scan_analysis_id: analysisId,
+    scan_result: { analysisId, queuedAt: new Date().toISOString() },
   }).eq("id", body.fileId);
 
-  if (outcome.status === "infected") {
-    // Never leave a known-malicious object sitting in private storage.
-    await removeRejectedObject(path);
-    await db.from("products").update({
-      status: "rejected",
-      file_id: null,
-      rejection_reason: "Malware detected by automated security scanning.",
-    }).eq("id", body.productId);
-    await audit({ actorId: user.id, actorRole: user.role, action: "upload.malware_detected", targetType: "product", targetId: body.productId, metadata: outcome.result });
-    throw new HttpError(422, "Malware detected; product rejected", "malware_detected");
+  const queued = await enqueueScan({
+    fileId: ctx.fileId,
+    productId: ctx.productId,
+    analysisId,
+    storagePath: ctx.path,
+    originalFilename: ctx.originalFilename,
+    expectedChecksum: body.expectedChecksum,
+    actorId: ctx.actorId,
+    actorRole: "seller",
+  });
+
+  if (queued) {
+    await audit({
+      actorId: ctx.actorId,
+      actorRole: ctx.actorRole,
+      action: "upload.scan_queued",
+      targetType: "product",
+      targetId: ctx.productId,
+      metadata: { analysisId },
+    });
+    return ok({ scanStatus: "scanning", nextStatus: "scanning", queued: true });
   }
 
-  // Scan passed: seller still cannot publish. Admin review is mandatory.
-  await db.from("products").update({ status: "pending_review" }).eq("id", body.productId);
-  await audit({ actorId: user.id, actorRole: user.role, action: "upload.scan_clean", targetType: "product", targetId: body.productId });
-  return ok({ scanStatus: outcome.status, nextStatus: "pending_review" });
+  // Local/VPS fallback: no Cloudflare Queue binding, so poll synchronously.
+  let outcome: ScanOutcome;
+  try {
+    outcome = await pollScan(analysisId);
+  } catch (error) {
+    await failScan(ctx, error);
+    throw new HttpError(422, "Malware scanning failed; product rejected", "scan_failed");
+  }
+  await applyOutcome(ctx, outcome);
+  return ok({ scanStatus: outcome.status, nextStatus: "pending_review", queued: false });
 });

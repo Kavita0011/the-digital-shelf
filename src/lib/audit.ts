@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "./supabase";
+import { getSupabaseAdmin } from "./admin-db";
 import type { AuditContext } from "./types";
 
 /** Append-only audit record. Never throws: auditing must not break the action. */

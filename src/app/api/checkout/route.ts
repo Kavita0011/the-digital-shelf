@@ -32,8 +32,8 @@ function safeRedirect(candidate: string | undefined, fallback: string, appUrl: s
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
   const user = await requireUser();
-  rateLimit(`checkout:${user.id}`, 10, 10 * 60 * 1000);
-  rateLimitByIp(requestIp(req), "checkout", 30, 10 * 60 * 1000);
+  await rateLimit(`checkout:${user.id}`, 10, 10 * 60 * 1000);
+  await rateLimitByIp(requestIp(req), "checkout", 30, 10 * 60 * 1000);
   const body = schema.parse(await req.json());
   const db = getSupabaseAdmin();
   const env = getServerEnv();

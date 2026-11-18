@@ -10,7 +10,7 @@ import { HttpError, requestIp } from "@/lib/auth";
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
   const ip = requestIp(req);
-  rateLimitByIp(ip, "register", 5, 60 * 60 * 1000);
+  await rateLimitByIp(ip, "register", 5, 60 * 60 * 1000);
   const body = registerSchema.parse(await req.json());
 
   const supabase = await createSupabaseServerClient();

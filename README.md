@@ -37,6 +37,7 @@ Sellers can upload but **never publish directly**: every file is validated by ma
 │   ├── migrations/0003_security_fixes.sql role whitelist, coupon/freeze RPCs, indexes
 │   ├── migrations/0004_public_column_privileges.sql column-level anon grants
 │   ├── migrations/0005_webhook_idempotency.sql retry-safe credits and payments
+│   ├── migrations/0006_cloudflare_scan_queue.sql VirusTotal analysis id for queue workers
 │   └── seed/seed.ts                  demo users, seller, products, audit entry
 ├── .env.example
 ├── package.json
@@ -52,7 +53,9 @@ Sellers can upload but **never publish directly**: every file is validated by ma
 - A Cloudflare R2 bucket (private, no public access)
 - A VirusTotal API key with file-scan access
 - Stripe account with Connect enabled (real **test** keys for development)
-- `supabase` CLI (for migrations) and `git`
+- `supabase` CLI (for migrations), Wrangler, and `git`
+- A Cloudflare Workers account (for the OpenNext deployment path)
+- A Cloudflare KV namespace and Queue for shared rate limits and background malware scans
 
 ---
 
@@ -94,7 +97,7 @@ npm run db:migrate     # supabase db push
 DEMO_PASSWORD='a-strong-demo-password' npm run db:seed
 ```
 
-If you manage migrations manually, apply the SQL files in `supabase/migrations/` in numeric order (`0001`–`0005`). `0003_security_fixes.sql` removes client-controlled role assignment from the auth trigger, adds atomic coupon/credit RPCs, and lets a single payment intent cover a multi-item cart. `0004_public_column_privileges.sql` restricts the anon key to public-only product/category columns, so a direct `select=*` REST call cannot read internal fields such as rejection notes or file checksums. `0005_webhook_idempotency.sql` makes credit redemption and payment recording safe to retry, and the webhook debits credits before marking an order paid.
+If you manage migrations manually, apply the SQL files in `supabase/migrations/` in numeric order (`0001`–`0006`). `0003_security_fixes.sql` removes client-controlled role assignment from the auth trigger, adds atomic coupon/credit RPCs, and lets a single payment intent cover a multi-item cart. `0004_public_column_privileges.sql` restricts the anon key to public-only product/category columns, so a direct `select=*` REST call cannot read internal fields such as rejection notes or file checksums. `0005_webhook_idempotency.sql` makes credit redemption and payment recording safe to retry, and the webhook debits credits before marking an order paid. `0006_cloudflare_scan_queue.sql` adds the VirusTotal analysis id used by the background scan queue.
 
 ```bash
 npm run dev            # http://localhost:3000
@@ -110,6 +113,40 @@ npm run build
 ```
 
 CI runs the same four checks on every push and pull request. It copies `.env.example` to `.env.local` for build-time placeholders only; no real secrets are ever committed.
+
+---
+
+## 3.1 Cloudflare Workers deployment
+
+This app deploys to Cloudflare Workers with the OpenNext adapter. Supabase remains the Postgres/Auth provider; Stripe and VirusTotal remain external APIs.
+
+Create the supporting Cloudflare resources first:
+
+```bash
+npx wrangler login
+npx wrangler kv namespace create RATE_LIMIT_KV
+npx wrangler queues create digital-shelf-scan
+npx wrangler types --env-interface CloudflareEnv
+```
+
+Put the generated KV namespace id into `wrangler.jsonc` (`kv_namespaces[0].id`). Then set Cloudflare runtime secrets (never commit them). Required public values for the build are `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`. All other values from `.env.example` are server-only runtime secrets.
+
+Stop `next dev` before any build/preview/deploy command.
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run preview
+npm run deploy
+```
+
+For CI, use Workers Builds:
+
+- Build command: `npx @opennextjs/cloudflare build`
+- Deploy command: `npx @opennextjs/cloudflare deploy`
+
+The custom `worker.ts` reuses the generated OpenNext fetch handler and adds a `queue` handler that polls VirusTotal. `next.config.mjs` calls `initOpenNextCloudflareForDev()` so `next dev` can resolve bindings locally. `MAX_UPLOAD_BYTES` is 25 MB on Workers because the complete route validates the file in memory.
 
 ---
 
@@ -132,8 +169,8 @@ CI runs the same four checks on every push and pull request. It copies `.env.exa
 1. Seller creates a draft (`POST /api/seller/products`) after seller approval.
 2. `POST /api/uploads/presign` validates the filename, creates a `product_files` row, and returns a 15-minute R2 presigned PUT URL.
 3. Client uploads bytes directly to R2.
-4. `POST /api/uploads/complete` downloads the bytes server-side, verifies **magic-byte MIME**, size (100 MB), blocked extensions, and SHA-256 checksum, then submits the file to VirusTotal.
-5. Clean → `pending_review`. Infected/failed → `rejected` with a stored reason.
+4. `POST /api/uploads/complete` downloads the bytes server-side, verifies **magic-byte MIME**, size (25 MB on Workers), blocked extensions, and SHA-256 checksum, then submits the file to VirusTotal.
+5. On Workers, a Cloudflare Queue consumer polls the analysis and updates the file; the browser polls `scan-status`. Clean → `pending_review`. Infected/failed → `rejected` with a stored reason and the object deleted.
 6. Admin reviews scan metadata and approves, rejects (with reason), requests changes, hides, removes, restores, features, or permanently deletes (only when no order history).
 7. Every transition writes an append-only audit record.
 
@@ -157,14 +194,14 @@ Accepted content types: PDF, PNG, JPG, WEBP, ZIP, MP4, MP3, DOCX, XLSX, PPTX. Ex
 - HTTPS enforced at the edge / reverse proxy; HSTS, `nosniff`, `frame-ancestors` and referrer policies are set.
 - Supabase Auth handles password hashing, sessions and reset flows; session cookies are HTTP-only, Secure and SameSite=Lax.
 - Double-submit CSRF: middleware sets an HttpOnly HMAC-signed cookie; `/api/csrf` returns the raw token to the browser; all mutating routes require it in `x-csrf-token`.
-- Rate limits on login, registration, password reset, upload, checkout, reports and credit purchases (in-process LRU; replace with Redis/Upstash for multi-instance deployments).
+- Rate limits on login, registration, password reset, upload, checkout, reports and credit purchases. Limits use Cloudflare KV when the `RATE_LIMIT_KV` binding is present and an in-process LRU fallback locally; keep WAF rate-limit rules as the hard edge layer because KV is eventually consistent.
 - All input is validated with Zod; database access uses PostgREST parameterized queries; user content is rendered escaped by React.
 - Service-role key, Stripe secret key, R2 credentials and VirusTotal key exist only in server modules.
 - Audit log records actor, role, action, target, metadata, IP and user agent for important actions.
 
 ### Production hardening checklist
 
-- Move rate limiting to a shared store (Upstash/Redis).
+- Keep Cloudflare WAF rate-limit rules enabled in front of the KV-based application limits.
 - Add a CDN/WAF and strict CSP.
 - Generate strict Supabase types (`npx supabase gen types typescript`) and apply the `Database` generic in `src/lib/supabase.ts`.
 - Add preview-image watermark generation at upload time (e.g. Sharp overlay) before storing previews in R2 — the current schema stores a preview URL supplied by the seller and the UI labels it as a watermarked preview.

@@ -5,3 +5,7 @@ node_modules
 *.tsbuildinfo
 coverage
 dist
+.open-next
+.dev.vars
+.wrangler
+worker-configuration.d.ts

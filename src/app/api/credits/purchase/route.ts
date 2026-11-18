@@ -12,7 +12,7 @@ const PACKS: Record<string, number> = { small: 1000, medium: 5000, large: 10000 
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
   const user = await requireUser();
-  rateLimit(`credit-buy:${user.id}`, 5, 10 * 60 * 1000);
+  await rateLimit(`credit-buy:${user.id}`, 5, 10 * 60 * 1000);
   const { pack } = z.object({ pack: z.enum(["small", "medium", "large"]) }).parse(await req.json());
   const amount = PACKS[pack];
   const env = getServerEnv();
