@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "main": "worker.ts",
-  "name": "thedigitalshelf",
+  "name": "the-digital-shelf",
   "compatibility_date": "2026-11-18",
   "compatibility_flags": [
     "nodejs_compat",
@@ -14,7 +14,7 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "thedigitalshelf"
+      "service": "the-digital-shelf"
     }
   ],
   "kv_namespaces": [
