@@ -143,8 +143,10 @@ npm run deploy
 
 For CI, use Workers Builds:
 
-- Build command: `npx @opennextjs/cloudflare build`
-- Deploy command: `npx @opennextjs/cloudflare deploy`
+- Build command: `npm run build:cf`
+- Deploy command: `npm run deploy:cf`
+
+Do not use plain `npm run build` as the Workers Builds build command: it produces `.next` but not the `.open-next` output that the deploy step requires.
 
 The custom `worker.ts` reuses the generated OpenNext fetch handler and adds a `queue` handler that polls VirusTotal. `next.config.mjs` calls `initOpenNextCloudflareForDev()` so `next dev` can resolve bindings locally. `MAX_UPLOAD_BYTES` is 25 MB on Workers because the complete route validates the file in memory.
 
