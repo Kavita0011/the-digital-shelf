@@ -9,14 +9,17 @@ const sellerLinks = [
   ["/seller/sales", "Sales"], ["/seller/earnings", "Earnings"], ["/seller/payouts", "Payouts"],
 ];
 const adminLinks = [
-  ["/admin", "Overview"], ["/admin/products", "Products"], ["/admin/sellers", "Sellers"],
+  ["/admin", "Overview"], ["/admin/users", "Users"], ["/admin/products", "Products"], ["/admin/sellers", "Sellers"],
   ["/admin/orders", "Orders"], ["/admin/payments", "Payments"], ["/admin/refunds", "Refunds"],
   ["/admin/credits", "Credits"], ["/admin/reports", "Reports"], ["/admin/audit-logs", "Audit logs"],
   ["/admin/settings", "Settings"],
 ];
 
-export function DashboardNav({ area }: { area: "buyer" | "seller" | "admin" }) {
-  const links = area === "buyer" ? buyerLinks : area === "seller" ? sellerLinks : adminLinks;
+export function DashboardNav({ area, isImpersonating = false }: { area: "buyer" | "seller" | "admin"; isImpersonating?: boolean }) {
+  const baseLinks = area === "buyer" ? buyerLinks : area === "seller" ? sellerLinks : adminLinks;
+  const links = isImpersonating && area === "admin"
+    ? baseLinks.filter(([href]) => href !== "/admin/users")
+    : baseLinks;
   return (
     <aside className="w-full shrink-0 border-b border-slate-200 bg-white p-4 md:w-56 md:border-b-0 md:border-r">
       <p className="mb-4 px-2 text-xs font-semibold uppercase tracking-wider text-slate-400">{area} area</p>

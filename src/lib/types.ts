@@ -131,7 +131,11 @@ export interface AuditContext {
 export interface AuthenticatedUser {
   id: string;
   email: string;
+  /** Effective role. Changes during a signed super-admin impersonation. */
   role: Role;
+  /** Stored role, never changed by impersonation. */
+  realRole: Role;
+  impersonating: boolean;
   status: UserStatus;
   fullName: string | null;
 }

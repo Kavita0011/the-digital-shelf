@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { createSupabaseServerClient, getSupabaseAdmin } from "./supabase";
+import { readImpersonationRole } from "./impersonation";
 import type { AuthenticatedUser, Role } from "./types";
 
 export class HttpError extends Error {
@@ -13,7 +14,7 @@ export class HttpError extends Error {
 }
 
 /** Resolve the current user from Supabase session cookies and public.users. */
-export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
+export async function getCurrentUser(options: { ignoreImpersonation?: boolean } = {}): Promise<AuthenticatedUser | null> {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user: authUser },
@@ -28,10 +29,17 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     .single();
   if (!profile || profile.status !== "active") return null;
 
+  const realRole = profile.role as Role;
+  const impersonated = options.ignoreImpersonation || realRole !== "super_admin"
+    ? null
+    : await readImpersonationRole(profile.id);
+
   return {
     id: profile.id,
     email: profile.email,
-    role: profile.role as Role,
+    role: impersonated ?? realRole,
+    realRole,
+    impersonating: Boolean(impersonated),
     status: profile.status as "active",
     fullName: profile.full_name,
   };

@@ -9,3 +9,5 @@ dist
 .dev.vars
 .wrangler
 worker-configuration.d.ts
+cf-build.log
+.wrangler-dry-run
