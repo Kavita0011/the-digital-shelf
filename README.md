@@ -164,6 +164,21 @@ The custom `worker.ts` reuses the generated OpenNext fetch handler and adds a `q
 
 `requireUser()` / `requireRole()` enforce access on every API route. RLS is enabled on all tables, with public read only for `approved` products and categories and self-read for personal tables. All writes go through the server with a server-only service-role client.
 
+### Super-admin user management and view-as mode
+
+A **super admin** can open `/admin/users` to:
+
+- Change another user's role (buyer → seller → admin) through `PATCH /api/admin/users/[id]/role`. Self-targeting, peer targeting, and promotion to `super_admin` are all rejected; every change is written to the audit log with `from`/`to` metadata.
+- Temporarily **view the site as a buyer, seller, or admin** through `POST /api/admin/impersonate`. This sets a 1-hour, HMAC-signed, HttpOnly cookie whose payload is bound to the admin's user ID. The stored account role is never modified; `getCurrentUser()` applies the override only to the *effective* role, and `realRole` always retains the true value. A prominent banner in every dashboard offers **Return to admin** (`DELETE /api/admin/impersonate`), which clears the cookie and restores full privileges. Impersonation start/stop is audited and rate-limited, and ordinary admins cannot use it.
+
+There is no shared or hardcoded admin password. Register a normal account, then promote it in Supabase:
+
+```sql
+update public.users
+set role = 'super_admin', status = 'active'
+where lower(email) = lower('thedigitalshelf.admin@gmail.com');
+```
+
 ---
 
 ## 5. Upload and moderation pipeline
@@ -203,8 +218,10 @@ Accepted content types: PDF, PNG, JPG, WEBP, ZIP, MP4, MP3, DOCX, XLSX, PPTX. Ex
 
 ### Production hardening checklist
 
+- **Cloudflare WAF managed rules:** enable the Cloudflare Managed Ruleset and OWASP Core Ruleset in **blocking** mode on the zone in front of the Worker.
+- **Edge rate limits:** add Cloudflare rate-limit rules (e.g. 5 login attempts / minute, 10 API mutations / minute per IP) as the hard edge layer in front of the KV-based application limits. KV is eventually consistent and can be bypassed under high concurrency; the WAF is the authoritative control.
+- **Bot protection / managed challenge:** enable Bot Fight Mode or a managed challenge on `/api/*`, `/login`, `/register`, and `/admin/*` to blunt credential stuffing and automated scraping.
 - Keep Cloudflare WAF rate-limit rules enabled in front of the KV-based application limits.
-- Add a CDN/WAF and strict CSP.
 - Generate strict Supabase types (`npx supabase gen types typescript`) and apply the `Database` generic in `src/lib/supabase.ts`.
 - Add preview-image watermark generation at upload time (e.g. Sharp overlay) before storing previews in R2 — the current schema stores a preview URL supplied by the seller and the UI labels it as a watermarked preview.
 - Consider migrating multi-seller payouts to Stripe separate charges and transfers.
