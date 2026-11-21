@@ -43,19 +43,18 @@ async function ensureUser(account: (typeof ACCOUNTS)[number]) {
     user_metadata: { full_name: account.name, role: account.role },
   });
 
-  if (error && !error.message.includes("already registered")) throw error;
+  if (error && !error.message.toLowerCase().includes("already")) throw error;
 
   let id: string;
   if (created?.user) {
     id = created.user.id;
   } else {
-    const { data: existing, error: lookupError } = await admin
-      .from("users")
-      .select("id")
-      .eq("email", account.email)
-      .single();
-    if (lookupError || !existing) throw new Error(`Could not find existing user ${account.email}`);
-    id = String(existing.id);
+    // User exists in Auth but may not have a public.users row yet.
+    const { data: listed, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (listError) throw listError;
+    const match = listed?.users.find((u) => u.email?.toLowerCase() === account.email.toLowerCase());
+    if (!match) throw new Error(`Could not find existing user ${account.email}`);
+    id = match.id;
   }
 
   const { error: updateError } = await admin
