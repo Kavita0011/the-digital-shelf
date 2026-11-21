@@ -1,5 +1,5 @@
--- The Digital Shelf - combined migrations 
--- Generated 2026-11-21 04:06
+-- The Digital Shelf - combined migrations (idempotent) 
+-- Generated 2026-11-21 05:12
 
 -- ===== 0001_init.sql =====
 -- The Digital Shelf — initial schema
@@ -35,7 +35,7 @@ create table if not exists users (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create trigger users_updated before update on users for each row execute function set_updated_at();
+create or replace trigger users_updated before update on users for each row execute function set_updated_at();
 
 create table if not exists seller_profiles (
   id uuid primary key default gen_random_uuid(),
@@ -93,11 +93,11 @@ create table if not exists products (
   approved_at timestamptz,
   approved_by uuid references users(id) on delete set null
 );
-create trigger products_updated before update on products for each row execute function set_updated_at();
-create index products_public_idx on products(status, is_featured desc, created_at desc)
+create or replace trigger products_updated before update on products for each row execute function set_updated_at();
+create index if not exists products_public_idx on products(status, is_featured desc, created_at desc)
   where status = 'approved';
-create index products_seller_idx on products(seller_id, status);
-create index products_search_idx on products using gin ((title || ' ' || short_description) gin_trgm_ops);
+create index if not exists products_seller_idx on products(seller_id, status);
+create index if not exists products_search_idx on products using gin ((title || ' ' || short_description) gin_trgm_ops);
 
 create table if not exists product_files (
   id uuid primary key default gen_random_uuid(),
@@ -114,6 +114,7 @@ create table if not exists product_files (
   scan_result jsonb,
   uploaded_at timestamptz not null default now()
 );
+alter table products drop constraint if exists products_file_fk;
 alter table products add constraint products_file_fk
   foreign key (file_id) references product_files(id) on delete set null;
 
@@ -138,9 +139,9 @@ create table if not exists orders (
   created_at timestamptz not null default now(),
   paid_at timestamptz
 );
-create index orders_buyer_idx on orders(buyer_id, created_at desc);
-create index orders_seller_idx on orders(seller_id, created_at desc);
-create index orders_intent_idx on orders(stripe_payment_intent_id);
+create index if not exists orders_buyer_idx on orders(buyer_id, created_at desc);
+create index if not exists orders_seller_idx on orders(seller_id, created_at desc);
+create index if not exists orders_intent_idx on orders(stripe_payment_intent_id);
 
 create table if not exists payments (
   id uuid primary key default gen_random_uuid(),
@@ -157,9 +158,9 @@ create table if not exists payments (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create trigger payments_updated before update on payments for each row execute function set_updated_at();
-create index payments_user_idx on payments(user_id, created_at desc);
-create index payments_order_idx on payments(order_id);
+create or replace trigger payments_updated before update on payments for each row execute function set_updated_at();
+create index if not exists payments_user_idx on payments(user_id, created_at desc);
+create index if not exists payments_order_idx on payments(order_id);
 
 create table if not exists credit_wallets (
   id uuid primary key default gen_random_uuid(),
@@ -172,7 +173,7 @@ create table if not exists credit_wallets (
   updated_at timestamptz not null default now(),
   constraint wallet_nonnegative check (balance >= 0 and pending_balance >= 0 and frozen_balance >= 0)
 );
-create trigger wallets_updated before update on credit_wallets for each row execute function set_updated_at();
+create or replace trigger wallets_updated before update on credit_wallets for each row execute function set_updated_at();
 
 create table if not exists credit_transactions (
   id uuid primary key default gen_random_uuid(),
@@ -193,8 +194,8 @@ create table if not exists credit_transactions (
   expires_at timestamptz,
   created_at timestamptz not null default now()
 );
-create index credit_tx_user_idx on credit_transactions(user_id, created_at desc);
-create index credit_tx_wallet_idx on credit_transactions(wallet_id, created_at desc);
+create index if not exists credit_tx_user_idx on credit_transactions(user_id, created_at desc);
+create index if not exists credit_tx_wallet_idx on credit_transactions(wallet_id, created_at desc);
 
 create table if not exists downloads (
   id uuid primary key default gen_random_uuid(),
@@ -208,7 +209,7 @@ create table if not exists downloads (
   downloaded_at timestamptz,
   expires_at timestamptz not null
 );
-create index downloads_order_idx on downloads(order_id);
+create index if not exists downloads_order_idx on downloads(order_id);
 
 create table if not exists product_reports (
   id uuid primary key default gen_random_uuid(),
@@ -221,7 +222,7 @@ create table if not exists product_reports (
   created_at timestamptz not null default now(),
   resolved_at timestamptz
 );
-create index reports_status_idx on product_reports(status, created_at desc);
+create index if not exists reports_status_idx on product_reports(status, created_at desc);
 
 create table if not exists refunds (
   id uuid primary key default gen_random_uuid(),
@@ -264,7 +265,7 @@ create table if not exists disputes (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create trigger disputes_updated before update on disputes for each row execute function set_updated_at();
+create or replace trigger disputes_updated before update on disputes for each row execute function set_updated_at();
 
 create table if not exists webhook_events (
   id uuid primary key default gen_random_uuid(),
@@ -286,8 +287,8 @@ create table if not exists audit_logs (
   user_agent text,
   created_at timestamptz not null default now()
 );
-create index audit_created_idx on audit_logs(created_at desc);
-create index audit_actor_idx on audit_logs(actor_id, created_at desc);
+create index if not exists audit_created_idx on audit_logs(created_at desc);
+create index if not exists audit_actor_idx on audit_logs(actor_id, created_at desc);
 
 create table if not exists settings (
   id uuid primary key default gen_random_uuid(),
@@ -296,7 +297,7 @@ create table if not exists settings (
   updated_by uuid references users(id) on delete set null,
   updated_at timestamptz not null default now()
 );
-create trigger settings_updated before update on settings for each row execute function set_updated_at();
+create or replace trigger settings_updated before update on settings for each row execute function set_updated_at();
 
 -- ---------------------------------------------------------------------------
 -- Immutable financial / audit records
@@ -307,13 +308,13 @@ begin
   raise exception 'Immutable table: % is append-only', TG_TABLE_NAME;
 end $$;
 
-create trigger audit_logs_immutable before update or delete on audit_logs
+create or replace trigger audit_logs_immutable before update or delete on audit_logs
   for each row execute function forbid_mutation();
-create trigger credit_transactions_immutable before update or delete on credit_transactions
+create or replace trigger credit_transactions_immutable before update or delete on credit_transactions
   for each row execute function forbid_mutation();
-create trigger refunds_immutable before update or delete on refunds
+create or replace trigger refunds_immutable before update or delete on refunds
   for each row execute function forbid_mutation();
-create trigger webhook_events_immutable before update or delete on webhook_events
+create or replace trigger webhook_events_immutable before update or delete on webhook_events
   for each row execute function forbid_mutation();
 
 -- Wallet balance can only move through credit_transactions.
@@ -340,7 +341,7 @@ begin
   return NEW;
 end $$;
 
-create trigger credit_tx_apply
+create or replace trigger credit_tx_apply
 before insert on credit_transactions
 for each row execute function apply_credit_transaction();
 
@@ -355,7 +356,7 @@ begin
   end if;
   return NEW;
 end $$;
-create trigger wallet_balance_guard before update on credit_wallets
+create or replace trigger wallet_balance_guard before update on credit_wallets
   for each row execute function guard_wallet_balance();
 
 -- ---------------------------------------------------------------------------
@@ -381,26 +382,36 @@ alter table categories enable row level security;
 alter table coupons enable row level security;
 
 -- Public read of approved products and categories (anon + authenticated).
+drop policy if exists products_public_read on products;
 create policy products_public_read on products for select
   using (status = 'approved');
+drop policy if exists categories_public_read on categories;
 create policy categories_public_read on categories for select using (true);
 
 -- Owner-only reads for personal tables; all writes go through server API
 -- using the service role key, which bypasses RLS.
+drop policy if exists users_self_read on users;
 create policy users_self_read on users for select
   using (id = auth.uid());
+drop policy if exists seller_self_read on seller_profiles;
 create policy seller_self_read on seller_profiles for select
   using (user_id = auth.uid());
+drop policy if exists buyer_self_read on buyer_profiles;
 create policy buyer_self_read on buyer_profiles for select
   using (user_id = auth.uid());
+drop policy if exists wallet_self_read on credit_wallets;
 create policy wallet_self_read on credit_wallets for select
   using (user_id = auth.uid());
+drop policy if exists credit_tx_self_read on credit_transactions;
 create policy credit_tx_self_read on credit_transactions for select
   using (user_id = auth.uid());
+drop policy if exists orders_self_read on orders;
 create policy orders_self_read on orders for select
   using (buyer_id = auth.uid());
+drop policy if exists payments_self_read on payments;
 create policy payments_self_read on payments for select
   using (user_id = auth.uid());
+drop policy if exists downloads_self_read on downloads;
 create policy downloads_self_read on downloads for select
   using (user_id = auth.uid());
 
@@ -453,7 +464,7 @@ begin
 end $$;
 
 drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created after insert on auth.users
+create or replace trigger on_auth_user_created after insert on auth.users
   for each row execute function handle_new_user();
 
 -- Create a wallet for every user.
@@ -464,7 +475,7 @@ begin
   return new;
 end $$;
 drop trigger if exists on_user_wallet_created on users;
-create trigger on_user_wallet_created after insert on users
+create or replace trigger on_user_wallet_created after insert on users
   for each row execute function handle_new_wallet();
 
 -- Atomically redeem credits for an order. Called by checkout service with
@@ -622,11 +633,11 @@ grant execute on function freeze_credits(uuid, integer) to service_role;
 -- 5. A single Stripe payment intent covers every order in a multi-item cart,
 -- so orders.stripe_payment_intent_id cannot be unique. Keep the lookup index.
 alter table orders drop constraint if exists orders_stripe_payment_intent_id_key;
-create index if not exists orders_intent_idx on orders(stripe_payment_intent_id);
+create index if not exists if not exists orders_intent_idx on orders(stripe_payment_intent_id);
 
 -- 6. Indexes for the filters used by admin audit logs and coupon lookups.
-create index if not exists audit_logs_action_idx on audit_logs(action, created_at desc);
-create index if not exists coupons_code_trgm_idx on coupons using gin (upper(code) gin_trgm_ops);
+create index if not exists if not exists audit_logs_action_idx on audit_logs(action, created_at desc);
+create index if not exists if not exists coupons_code_trgm_idx on coupons using gin (upper(code) gin_trgm_ops);
 
 
 -- ===== 0004_public_column_privileges.sql =====
@@ -738,12 +749,14 @@ grant execute on function redeem_credits(uuid, integer, uuid, uuid, text) to ser
 alter table public.product_files
   add column if not exists scan_analysis_id text;
 
-create index if not exists product_files_scan_analysis_idx
+create index if not exists if not exists product_files_scan_analysis_idx
   on public.product_files (scan_analysis_id)
   where scan_analysis_id is not null;
 
 comment on column public.product_files.scan_analysis_id is
   'VirusTotal analysis id used by the Cloudflare Queue scan consumer.';
+
+
 
 
 
