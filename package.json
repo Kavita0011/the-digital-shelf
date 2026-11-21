@@ -11,6 +11,7 @@
     "test": "tsx --test tests/*.test.ts",
     "db:migrate": "supabase db push",
     "db:seed": "tsx supabase/seed/seed.ts",
+    "db:accounts": "tsx supabase/seed/accounts.ts",
     "build:cf": "opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
