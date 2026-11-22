@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { ALLOWED_MIME_TYPES, BLOCKED_EXTENSIONS, type AllowedMimeType } from "./types";
 import { HttpError } from "./auth";
 
-const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES ?? 104_857_600); // 100 MB
+const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES ?? 26_214_400); // 25 MB
 
 /** Magic-byte signatures. ZIP-based Office formats need deeper inspection. */
 const MAGIC: Array<{ mime: AllowedMimeType; bytes: number[]; offset?: number }> = [
@@ -85,7 +85,7 @@ function extFromName(name: string) { return name.slice(name.lastIndexOf(".")).to
 export function inspectFile(buffer: Buffer, originalName: string): InspectedFile {
   assertSafeFilename(originalName);
   if (buffer.length === 0) throw new HttpError(400, "Empty file", "empty_file");
-  if (buffer.length > MAX_UPLOAD_BYTES) throw new HttpError(413, "File exceeds 100 MB limit", "file_too_large");
+  if (buffer.length > MAX_UPLOAD_BYTES) throw new HttpError(413, "File exceeds the configured size limit", "file_too_large");
   const detectedMime = detectMime(buffer);
   if (!detectedMime || !ALLOWED_MIME_TYPES.includes(detectedMime)) {
     throw new HttpError(400, "Unsupported or unrecognized file content", "unsupported_file_type");

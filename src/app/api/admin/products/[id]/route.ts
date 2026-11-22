@@ -3,7 +3,7 @@ import { ok, route } from "@/lib/api";
 import { assertCsrf } from "@/lib/csrf";
 import { requireRole, HttpError } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { deleteObject } from "@/lib/r2";
+import { deleteObject } from "@/lib/storage";
 import { audit } from "@/lib/audit";
 
 /** Permanent deletion: only for drafts/rejected/removed products; financial history stays. */

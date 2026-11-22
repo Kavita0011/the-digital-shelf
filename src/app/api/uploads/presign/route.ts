@@ -7,7 +7,7 @@ import { HttpError, requireUser, requestIp } from "@/lib/auth";
 import { ALLOWED_MIME_TYPES } from "@/lib/types";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertSafeFilename, safeStoredName, storagePath } from "@/lib/file-security";
-import { presignUpload } from "@/lib/r2";
+import { presignUpload } from "@/lib/storage";
 import { audit } from "@/lib/audit";
 
 const bodySchema = z.object({
@@ -41,7 +41,7 @@ export const POST = route(async (req: NextRequest) => {
 
   const storedFilename = safeStoredName(body.originalFilename);
   const path = storagePath(seller.id, storedFilename);
-  const uploadUrl = await presignUpload(path, body.mimeType, body.size);
+  const uploadUrl = await presignUpload(path);
 
   // Create the private file record up-front so /complete can verify + scan it.
   const { data: fileRecord, error: fileError } = await getSupabaseAdmin().from("product_files").insert({

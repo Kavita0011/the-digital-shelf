@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireUser, HttpError, requestIp } from "@/lib/auth";
-import { presignDownload } from "@/lib/r2";
+import { presignDownload } from "@/lib/storage";
 import { downloadTtlSeconds } from "@/lib/downloads";
 import { audit } from "@/lib/audit";
 
@@ -11,7 +11,7 @@ export const runtime = "nodejs";
  * Purchase-bound download gate.
  * Validates that the token belongs to the signed-in buyer, is unexpired and
  * unused (unless repeat downloads are enabled), then redirects to a fresh
- * R2 presigned GET URL that expires in 10 minutes.
+ * Supabase Storage signed GET URL that expires in 10 minutes.
  */
 export const GET = async (req: NextRequest, ctx: { params: Promise<{ token: string }> }) => {
   try {

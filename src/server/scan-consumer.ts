@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from "../lib/admin-db";
 import { audit } from "../lib/audit";
 import { fetchAnalysis, type ScanOutcome } from "../lib/malware";
 import type { ScanQueueMessage } from "../lib/queue";
-import { deleteObject } from "../lib/r2";
+import { deleteObject } from "../lib/storage";
 
 export interface ScanDelivery {
   attempts: number;

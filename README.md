@@ -1,6 +1,6 @@
 # The Digital Shelf
 
-A curated digital-product marketplace built with **Next.js 15 (App Router) + TypeScript + Tailwind CSS**, **Supabase Postgres + Supabase Auth**, **Cloudflare R2** private storage, **VirusTotal** malware scanning, and **Stripe Checkout + Stripe Connect**.
+A curated digital-product marketplace built with **Next.js 15 (App Router) + TypeScript + Tailwind CSS**, **Supabase Postgres + Supabase Auth + Supabase Storage** (private bucket), **VirusTotal** malware scanning, and **Stripe Checkout + Stripe Connect**.
 
 Sellers can upload but **never publish directly**: every file is validated by magic bytes, renamed to a UUID, stored in a private bucket, scanned by VirusTotal, and then manually approved by an admin.
 
@@ -17,7 +17,7 @@ Sellers can upload but **never publish directly**: every file is validated by ma
 │   │   │   ├── products/             public browse, search, categories, detail
 │   │   │   ├── seller/products/      seller CRUD + submit for review
 │   │   │   ├── uploads/              presign, complete (scan), scan-status
-│   │   │   ├── downloads/[token]/    single-use download gate → R2 signed URL
+│   │   │   ├── downloads/[token]/    single-use download gate → Storage signed URL
 │   │   │   ├── checkout/ cart/       server-priced Stripe checkout
 │   │   │   ├── payments/webhook/     verified, idempotent Stripe webhooks
 │   │   │   ├── credits/              balance, history, Stripe credit packs
@@ -29,7 +29,7 @@ Sellers can upload but **never publish directly**: every file is validated by ma
 │   │   ├── layout.tsx globals.css
 │   │   └── middleware.ts             session refresh + HttpOnly CSRF cookie
 │   ├── components/                   upload wizard, admin tables, buy/download buttons
-│   └── lib/                          auth, RBAC, CSRF, rate limit, audit, R2, malware,
+│   └── lib/                          auth, RBAC, CSRF, rate limit, audit, storage, malware,
 │                                     file-security, credits, Stripe, validation, types
 ├── supabase/
 │   ├── migrations/0001_init.sql      full schema, RLS, append-only triggers
@@ -50,7 +50,7 @@ Sellers can upload but **never publish directly**: every file is validated by ma
 
 - Node.js 20+ (tested on Node 24)
 - A Supabase project (Postgres 15+)
-- A Cloudflare R2 bucket (private, no public access)
+- A private Supabase Storage bucket (`npm run db:bucket` creates it)
 - A VirusTotal API key with file-scan access
 - Stripe account with Connect enabled (real **test** keys for development)
 - `supabase` CLI (for migrations), Wrangler, and `git`

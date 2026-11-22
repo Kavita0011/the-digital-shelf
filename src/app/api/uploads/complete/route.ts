@@ -8,7 +8,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { assertDeclaredMime, inspectFile } from "@/lib/file-security";
 import { startScan, pollScan, type ScanOutcome } from "@/lib/malware";
 import { enqueueScan } from "@/lib/queue";
-import { deleteObject, getObject, objectExists } from "@/lib/r2";
+import { deleteObject, getObject, objectExists } from "@/lib/storage";
 import { audit } from "@/lib/audit";
 
 const bodySchema = z.object({
@@ -118,7 +118,7 @@ export const POST = route(async (req: NextRequest) => {
   const path = String(file.storage_path);
   if (!(await objectExists(path))) throw new HttpError(400, "Uploaded object missing", "missing_object");
 
-  // Fetch bytes from private R2 storage using the server SDK (never a public URL).
+  // Fetch bytes from private Supabase Storage using the service-role client (never a public URL).
   const buffer = await getObject(path);
 
   let inspected;
