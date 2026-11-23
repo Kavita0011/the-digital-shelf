@@ -5,6 +5,9 @@ let stripe: Stripe | null = null;
 export function getStripe(): Stripe {
   if (stripe) return stripe;
   const env = getServerEnv();
+  if (!env.STRIPE_SECRET_KEY) {
+    throw new Error("Stripe is not configured. Set STRIPE_SECRET_KEY and related Stripe env vars.");
+  }
   stripe = new Stripe(env.STRIPE_SECRET_KEY, {
     httpClient: Stripe.createFetchHttpClient(),
   });

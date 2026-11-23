@@ -11,11 +11,12 @@ const serverSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
   SESSION_SECRET: z.string().min(32),
   SUPABASE_STORAGE_BUCKET: z.string().min(1).default("product-files"),
-  VT_FILESCAN_API_KEY: z.string().min(1),
-  STRIPE_SECRET_KEY: z.string().min(1),
-  STRIPE_WEBHOOK_SECRET: z.string().min(1),
-  STRIPE_CONNECT_CLIENT_ID: z.string().min(1),
-  STRIPE_PLATFORM_ACCOUNT_ID: z.string().min(1),
+  // Optional until configured; scan/payment endpoints return a clear error when used.
+  VT_FILESCAN_API_KEY: z.string().default(""),
+  STRIPE_SECRET_KEY: z.string().default(""),
+  STRIPE_WEBHOOK_SECRET: z.string().default(""),
+  STRIPE_CONNECT_CLIENT_ID: z.string().default(""),
+  STRIPE_PLATFORM_ACCOUNT_ID: z.string().default(""),
 });
 
 export type ServerEnv = z.infer<typeof serverSchema>;
