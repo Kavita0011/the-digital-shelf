@@ -22,10 +22,11 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
   if (isMutation) headers.set("x-csrf-token", await getCsrfToken());
 
   const res = await fetch(url, { ...init, credentials: "same-origin", headers });
+  const json = await res.json().catch(() => null);
 
-  // A concurrent login/logout may rotate the cookie after the token was read.
-  // Retry once with a fresh token instead of showing a stale-token error.
-  if (res.status === 403 && isMutation) {
+  // Retry only a stale CSRF token. A genuine 403 (for example forbidden or
+  // insufficient permissions) must not replay a non-idempotent mutation.
+  if (isMutation && res.status === 403 && json?.error?.code === "csrf_failed") {
     headers.set("x-csrf-token", await getCsrfToken());
     const retry = await fetch(url, { ...init, credentials: "same-origin", headers });
     const retryJson = await retry.json().catch(() => null);
@@ -33,7 +34,6 @@ export async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<
     return retryJson.data as T;
   }
 
-  const json = await res.json().catch(() => null);
   if (!json?.ok) throw new Error(json?.error?.message ?? `Request failed (${res.status})`);
   return json.data as T;
 }

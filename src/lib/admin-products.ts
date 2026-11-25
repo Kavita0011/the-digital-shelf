@@ -15,7 +15,12 @@ export async function transitionProduct(
   extra: Record<string, unknown> = {},
 ) {
   const db = getSupabaseAdmin();
-  const { data: product } = await db.from("products").select("id,status,title").eq("id", productId).single();
+  const { data: product, error: productError } = await db
+    .from("products")
+    .select("id,status,title,file_id")
+    .eq("id", productId)
+    .single();
+  if (productError) throw productError;
   if (!product) throw new HttpError(404, "Product not found", "not_found");
 
   const update: Record<string, unknown> = { status, ...extra };
@@ -29,8 +34,19 @@ export async function transitionProduct(
     if (!["pending_review", "hidden", "removed", "rejected"].includes(product.status)) {
       throw new HttpError(409, "This product cannot be approved from its current state", "invalid_transition");
     }
-    const { data: file } = await db.from("product_files").select("scan_status").eq("id", (await db.from("products").select("file_id").eq("id", productId).single()).data?.file_id ?? "").single();
-    if (file && file.scan_status !== "clean") throw new HttpError(409, "Cannot approve a product that failed malware scanning", "scan_not_clean");
+    if (!product.file_id) {
+      throw new HttpError(409, "Cannot approve a product without an uploaded file", "file_required");
+    }
+    const { data: file, error: fileError } = await db
+      .from("product_files")
+      .select("scan_status")
+      .eq("id", product.file_id)
+      .single();
+    if (fileError) throw fileError;
+    if (!file) throw new HttpError(409, "The uploaded file for this product was not found", "file_not_found");
+    if (file.scan_status !== "clean") {
+      throw new HttpError(409, "Cannot approve a product that failed malware scanning", "scan_not_clean");
+    }
   }
   if (status === "rejected") {
     if (!reason) throw new HttpError(400, "Rejection reason is required", "reason_required");

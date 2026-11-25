@@ -74,16 +74,30 @@ export function assertCanManageUser(actor: AuthenticatedUser, targetId: string, 
   }
 }
 
+/** Prevent privilege escalation by assigning a role equal to or above the actor's. */
+export function assertCanAssignRole(actor: AuthenticatedUser, newRole: Role): void {
+  if (ROLE_RANK[newRole] >= ROLE_RANK[actor.role]) {
+    throw new HttpError(403, "You cannot assign a role equal to or higher than your own", "forbidden");
+  }
+}
+
 /**
- * Extract the client IP using only the last forwarding hop, which is the
- * address appended by the trusted edge proxy. The first X-Forwarded-For value
- * is client-controlled and must never be trusted for rate limiting.
+ * Extract the client IP. Cloudflare sets CF-Connecting-IP at the edge, so it
+ * takes precedence over headers a client could send. X-Forwarded-For is a
+ * fallback for non-Cloudflare deployments; only its last hop is used because
+ * earlier hops are client-controlled.
  */
 export function requestIp(req: NextRequest): string | null {
+  const cloudflareIp = req.headers.get("cf-connecting-ip")?.trim();
+  if (cloudflareIp) return cloudflareIp;
+
+  const realIp = req.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) {
     const hops = forwarded.split(",").map((hop) => hop.trim()).filter(Boolean);
     return hops.length ? hops[hops.length - 1] : null;
   }
-  return req.headers.get("x-real-ip");
+  return null;
 }

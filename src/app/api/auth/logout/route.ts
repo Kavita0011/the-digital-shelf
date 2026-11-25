@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase";
 import { ok, route } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { getCurrentUser, requestIp } from "@/lib/auth";
+import { clearImpersonationCookie } from "@/lib/impersonation";
 import { assertCsrf, csrfCookieOptions } from "@/lib/csrf";
 
 export const POST = route(async (req: NextRequest) => {
@@ -10,6 +11,7 @@ export const POST = route(async (req: NextRequest) => {
   const user = await getCurrentUser();
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
+  await clearImpersonationCookie();
   if (user) {
     await audit({
       actorId: user.id,
