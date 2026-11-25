@@ -2,11 +2,25 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { DashboardNav } from "@/components/dashboard-nav";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { RoleModeSwitcher } from "@/components/role-mode-switcher";
+import { readImpersonationRole } from "@/lib/impersonation";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user || (user.role !== "admin" && user.role !== "super_admin")) redirect("/login");
-  return <div className="container-page py-10">{user.impersonating && <ImpersonationBanner role={user.role} />}<div className="flex flex-col gap-8 md:flex-row"><DashboardNav area="admin" isImpersonating={user.impersonating} /><div className="min-w-0 flex-1">{children}</div></div></div>;
+
+  const viewMode = user.realRole === "super_admin" ? await readImpersonationRole(user.id) : null;
+
+  return (
+    <div className="container-page py-10">
+      {user.impersonating && <ImpersonationBanner role={user.role} mode={viewMode} />}
+      {user.realRole === "super_admin" && <RoleModeSwitcher mode={viewMode} />}
+      <div className="mt-8 flex flex-col gap-8 md:flex-row">
+        <DashboardNav area="admin" isImpersonating={user.impersonating} />
+        <div className="min-w-0 flex-1">{children}</div>
+      </div>
+    </div>
+  );
 }

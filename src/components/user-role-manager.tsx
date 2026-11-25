@@ -12,8 +12,6 @@ interface ManagedUser {
   fullName: string | null;
 }
 
-type ViewRole = "buyer" | "seller" | "admin";
-
 export function UserRoleManager({ users: initialUsers }: { users: ManagedUser[] }) {
   const [users, setUsers] = useState(initialUsers);
   const [message, setMessage] = useState("");
@@ -32,30 +30,11 @@ export function UserRoleManager({ users: initialUsers }: { users: ManagedUser[] 
     }
   }
 
-  async function viewAs(role: ViewRole) {
-    setBusyId(`view-${role}`); setMessage("");
-    try {
-      await apiFetch("/api/admin/impersonate", { method: "POST", body: JSON.stringify({ role }) });
-      window.location.href = role === "buyer" ? "/buyer/dashboard" : role === "seller" ? "/seller/dashboard" : "/admin";
-    } catch (error) {
-      setMessage((error as Error).message);
-      setBusyId("");
-    }
-  }
-
   return (
     <div className="mt-6">
-      <div className="card flex flex-wrap items-center gap-2 p-4">
-        <span className="text-sm font-medium">Temporarily view the site as:</span>
-        <button className="btn-ghost" disabled={Boolean(busyId)} onClick={() => viewAs("buyer")}>Buyer</button>
-        <button className="btn-ghost" disabled={Boolean(busyId)} onClick={() => viewAs("seller")}>Seller</button>
-        <button className="btn-ghost" disabled={Boolean(busyId)} onClick={() => viewAs("admin")}>Admin</button>
-        <span className="ml-auto text-xs text-slate-500">Your real account stays super_admin.</span>
-      </div>
+      {message && <p className="mb-3 text-sm text-slate-700">{message}</p>}
 
-      {message && <p className="mt-3 text-sm text-slate-700">{message}</p>}
-
-      <div className="card mt-4 overflow-x-auto p-4">
+      <div className="card overflow-x-auto p-4">
         <table className="w-full min-w-[620px] text-left text-sm">
           <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
             <tr><th className="p-2">User</th><th className="p-2">Status</th><th className="p-2">Role</th></tr>

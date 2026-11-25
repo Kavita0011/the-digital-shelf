@@ -1,5 +1,5 @@
 /**
- * Create the super admin and a test user in Supabase.
+ * Create the super admin and test buyer/seller accounts in Supabase.
  *
  * Usage:
  *   1. Copy .env.example to .env.local and fill in:
@@ -10,7 +10,8 @@
  *   2. Run: npm run db:accounts
  *
  * Passwords are never printed or stored in the repo. If an account already
- * exists, its role is updated instead of recreating it.
+ * exists, its role is updated instead of recreating it. The seller profile is
+ * approved so the seller dashboard and admin view-as mode are usable immediately.
  */
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
@@ -33,9 +34,12 @@ const admin = createClient(url, serviceKey, { auth: { autoRefreshToken: false, p
 const ACCOUNTS = [
   { email: "thedigitalshelf.admin@gmail.com", password: adminPassword!, role: "super_admin", name: "Super Admin" },
   { email: "testuser@example.com", password: testPassword!, role: "buyer", name: "Test Buyer" },
+  { email: "testseller@example.com", password: testPassword!, role: "seller", name: "Test Seller" },
 ] as const;
 
-async function ensureUser(account: (typeof ACCOUNTS)[number]) {
+type Account = (typeof ACCOUNTS)[number];
+
+async function ensureUser(account: Account): Promise<string> {
   const { data: created, error } = await admin.auth.admin.createUser({
     email: account.email,
     password: account.password,
@@ -57,6 +61,11 @@ async function ensureUser(account: (typeof ACCOUNTS)[number]) {
     id = match.id;
   }
 
+  const { error: metadataError } = await admin.auth.admin.updateUserById(id, {
+    user_metadata: { full_name: account.name, role: account.role },
+  });
+  if (metadataError) throw metadataError;
+
   const { error: updateError } = await admin
     .from("users")
     .upsert(
@@ -66,11 +75,36 @@ async function ensureUser(account: (typeof ACCOUNTS)[number]) {
   if (updateError) throw updateError;
 
   console.log(`Ready: ${account.email} (${account.role})`);
+  return id;
 }
 
 async function main() {
-  for (const account of ACCOUNTS) await ensureUser(account);
-  console.log("Admin and test user are ready. Passwords were read from .env.local and never printed.");
+  const ids: Record<string, string> = {};
+  for (const account of ACCOUNTS) ids[account.email] = await ensureUser(account);
+
+  const buyerId = ids["testuser@example.com"];
+  const sellerId = ids["testseller@example.com"];
+
+  const { error: buyerProfileError } = await admin
+    .from("buyer_profiles")
+    .upsert({ user_id: buyerId }, { onConflict: "user_id" });
+  if (buyerProfileError) throw buyerProfileError;
+
+  const { error: sellerProfileError } = await admin
+    .from("seller_profiles")
+    .upsert(
+      {
+        user_id: sellerId,
+        store_name: "The Digital Shelf Test Store",
+        bio: "Approved test seller account for demos and QA.",
+        verification_status: "approved",
+        payout_status: "not_connected",
+      },
+      { onConflict: "user_id" },
+    );
+  if (sellerProfileError) throw sellerProfileError;
+
+  console.log("Admin, buyer, and seller accounts are ready. Passwords were read from .env.local and never printed.");
 }
 
 main().catch((error) => {

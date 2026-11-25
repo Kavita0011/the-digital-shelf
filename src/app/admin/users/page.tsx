@@ -36,7 +36,7 @@ export default async function AdminUsersPage() {
     <div>
       <h1 className="text-2xl font-bold">Users and roles</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Change a user’s role, or temporarily view the site as a buyer, seller, or admin. View-as does not change any stored account.
+        Change a user’s stored role here. Use the View mode switcher above to preview the buyer, seller, or admin experience without changing any account.
       </p>
       <UserRoleManager users={users} />
     </div>
