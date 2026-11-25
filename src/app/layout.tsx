@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SUPPORT_EMAIL, SUPPORT_EMAIL_HREF } from "@/lib/site";
 import { MobileNav } from "@/components/mobile-nav";
+import { AccountLinks } from "@/components/account-links";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -30,8 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {nav.map((n) => <Link key={n.href} href={n.href} className="hover:text-brand-600">{n.label}</Link>)}
             </nav>
             <div className="hidden gap-2 md:flex">
-              <Link href="/login" className="btn-ghost">Log in</Link>
-              <Link href="/register" className="btn">Get started</Link>
+              <AccountLinks />
             </div>
             <MobileNav />
           </div>

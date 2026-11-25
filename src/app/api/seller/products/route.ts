@@ -38,11 +38,14 @@ export const POST = route(async (req: NextRequest) => {
   const body = productDraftSchema.parse(await req.json());
   const seller = await sellerIdFor(user.id);
 
-  const { data: count } = await getSupabaseAdmin().from("products").select("id", { count: "exact", head: true }).eq("seller_id", seller.id);
-  const { data: setting } = await getSupabaseAdmin().from("settings").select("value").eq("key", "max_products_per_seller").single();
+  const [{ count, error: countError }, { data: setting, error: settingError }] = await Promise.all([
+    getSupabaseAdmin().from("products").select("id", { count: "exact", head: true }).eq("seller_id", seller.id),
+    getSupabaseAdmin().from("settings").select("value").eq("key", "max_products_per_seller").single(),
+  ]);
+  if (countError) throw countError;
+  if (settingError && settingError.code !== "PGRST116") throw settingError;
   const max = Math.min(seller.upload_limit, Number(setting?.value ?? 25));
-  const current = count?.length ?? 0;
-  if (current >= max) throw new HttpError(403, "Product limit reached", "limit_reached");
+  if ((count ?? 0) >= max) throw new HttpError(403, "Product limit reached", "limit_reached");
 
   const { data: product, error } = await getSupabaseAdmin().from("products").insert({
     seller_id: seller.id,

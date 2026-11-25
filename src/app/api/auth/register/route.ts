@@ -29,10 +29,15 @@ export const POST = route(async (req: NextRequest) => {
     const { error: roleError } = await getSupabaseAdmin().from("users")
       .update({ role: "seller" }).eq("id", data.user.id);
     if (roleError) throw roleError;
-    await getSupabaseAdmin().from("seller_profiles").insert({
+    const { error: profileError } = await getSupabaseAdmin().from("seller_profiles").insert({
       user_id: data.user.id,
       store_name: `${body.fullName}'s Store`,
     });
+    if (profileError) {
+      // Do not leave a seller role without its required profile.
+      await getSupabaseAdmin().from("users").update({ role: "buyer" }).eq("id", data.user.id);
+      throw profileError;
+    }
   }
   await audit({
     actorId: data.user.id,

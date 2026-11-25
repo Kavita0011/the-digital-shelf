@@ -59,7 +59,9 @@ export async function middleware(req: NextRequest) {
       },
     },
   });
-  await supabase.auth.getUser();
+  // Anonymous visitors have no session to refresh; skip the Supabase call.
+  const hasSession = req.cookies.getAll().some((cookie) => cookie.name.includes("-auth-token"));
+  if (hasSession) await supabase.auth.getUser();
   return response;
 }
 

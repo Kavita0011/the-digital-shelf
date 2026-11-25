@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { loginSchema } from "@/lib/validation";
-import { createSupabaseServerClient } from "@/lib/supabase";
+import { createSupabaseServerClient, getSupabaseAdmin } from "@/lib/supabase";
 import { ok, route } from "@/lib/api";
 import { audit } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertCsrf, csrfCookieOptions } from "@/lib/csrf";
 import { requestIp } from "@/lib/auth";
+import type { Role } from "@/lib/types";
 
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
@@ -35,9 +36,24 @@ export const POST = route(async (req: NextRequest) => {
     );
   }
 
+  const { data: profile, error: profileError } = await getSupabaseAdmin()
+    .from("users")
+    .select("role,status")
+    .eq("id", data.user.id)
+    .single();
+  if (profileError) throw profileError;
+  if (!profile || profile.status !== "active") {
+    await supabase.auth.signOut();
+    return NextResponse.json(
+      { ok: false, error: { code: "account_inactive", message: "This account is not active" } },
+      { status: 403 },
+    );
+  }
+  const role = profile.role as Role;
+
   await audit({
     actorId: data.user.id,
-    actorRole: "buyer",
+    actorRole: role,
     action: "auth.login",
     targetType: "user",
     targetId: data.user.id,
@@ -45,7 +61,7 @@ export const POST = route(async (req: NextRequest) => {
     userAgent: req.headers.get("user-agent"),
   });
   // Rotate the CSRF token when privileges change.
-  const response = ok({ authenticated: true });
+  const response = ok({ authenticated: true, role });
   const csrf = csrfCookieOptions();
   response.cookies.set(csrf.name, csrf.value, csrf.options);
   return response;
