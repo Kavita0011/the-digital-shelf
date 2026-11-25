@@ -3,16 +3,18 @@ import Link from "next/link";
 const buyerLinks = [
   ["/buyer/dashboard", "Overview"], ["/buyer/purchases", "Purchases"], ["/buyer/downloads", "Downloads"],
   ["/buyer/payments", "Payment history"], ["/buyer/credits", "Credit wallet"], ["/buyer/credit-history", "Credit history"],
+  ["/buyer/settings", "Settings"], ["/notifications", "Notifications"],
 ];
 const sellerLinks = [
   ["/seller/dashboard", "Overview"], ["/seller/products", "My products"], ["/seller/upload", "Upload product"],
   ["/seller/sales", "Sales"], ["/seller/earnings", "Earnings"], ["/seller/payouts", "Payouts"],
+  ["/seller/settings", "Settings"], ["/notifications", "Notifications"],
 ];
 const adminLinks = [
   ["/admin", "Overview"], ["/admin/users", "Users"], ["/admin/products", "Products"], ["/admin/sellers", "Sellers"],
   ["/admin/orders", "Orders"], ["/admin/payments", "Payments"], ["/admin/refunds", "Refunds"],
   ["/admin/credits", "Credits"], ["/admin/reports", "Reports"], ["/admin/audit-logs", "Audit logs"],
-  ["/admin/settings", "Settings"],
+  ["/admin/settings", "Settings"], ["/notifications", "Notifications"],
 ];
 
 export function DashboardNav({ area, isImpersonating = false }: { area: "buyer" | "seller" | "admin"; isImpersonating?: boolean }) {

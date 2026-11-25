@@ -12,6 +12,12 @@ function dashboardFor(role: Role): string {
   return "/buyer/dashboard";
 }
 
+function settingsFor(role: Role): string {
+  if (role === "admin" || role === "super_admin") return "/admin/settings";
+  if (role === "seller") return "/seller/settings";
+  return "/buyer/settings";
+}
+
 /** Compact menu for small screens; the desktop nav is rendered in the layout. */
 export function MobileNav() {
   const [open, setOpen] = useState(false);
@@ -61,7 +67,7 @@ export function MobileNav() {
                 {link.label}
               </Link>
             ))}
-            <Link href={role ? "/buyer/settings" : "/register"} className="btn mt-2 text-center" onClick={() => setOpen(false)}>
+            <Link href={role ? settingsFor(role) : "/register"} className="btn mt-2 text-center" onClick={() => setOpen(false)}>
               {role ? "Account" : "Get started"}
             </Link>
             {role && (

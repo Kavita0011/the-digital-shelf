@@ -12,6 +12,12 @@ function dashboardFor(role: Role): string {
   return "/buyer/dashboard";
 }
 
+function settingsFor(role: Role): string {
+  if (role === "admin" || role === "super_admin") return "/admin/settings";
+  if (role === "seller") return "/seller/settings";
+  return "/buyer/settings";
+}
+
 /** Session-aware desktop links; hidden until auth state is known to avoid a wrong-state flash. */
 export function AccountLinks() {
   const [role, setRole] = useState<Role | null>(null);
@@ -40,7 +46,7 @@ export function AccountLinks() {
     return (
       <>
         <Link href={dashboardFor(role)} className="btn-ghost">Dashboard</Link>
-        <Link href="/buyer/settings" className="btn">Account</Link>
+        <Link href={settingsFor(role)} className="btn">Account</Link>
         <LogoutButton />
       </>
     );
