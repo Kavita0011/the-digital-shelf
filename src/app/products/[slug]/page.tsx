@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { safePublicRead } from "@/lib/safe-data";
 import { PUBLIC_PRODUCT_COLUMNS } from "@/lib/public-catalog";
 import { BuyButton } from "@/components/buy-button";
+import { AddToCartButton } from "@/components/cart-controls";
 
 export const dynamic = "force-dynamic";
 export default async function ProductDetail({ params }: { params: Promise<{ slug: string }> }) {
@@ -31,6 +32,7 @@ export default async function ProductDetail({ params }: { params: Promise<{ slug
         <div className="mt-4 flex flex-wrap gap-2">{(product.tags as string[]).map((t) => <span className="badge bg-slate-100" key={t}>{t}</span>)}</div>
         <div className="prose mt-8 whitespace-pre-wrap text-sm text-slate-700">{product.description}</div>
         <BuyButton productId={product.id} />
+        <AddToCartButton productId={product.id} />
         <p className="mt-3 text-xs text-slate-500">Secure checkout · Malware-scanned · Admin approved</p>
       </div>
     </div>
