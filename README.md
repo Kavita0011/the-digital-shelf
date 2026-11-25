@@ -214,7 +214,7 @@ Accepted content types: PDF, PNG, JPG, WEBP, ZIP, MP4, MP3, DOCX, XLSX, PPTX. Ex
 
 - HTTPS enforced at the edge / reverse proxy; HSTS, `nosniff`, `frame-ancestors` and referrer policies are set.
 - Supabase Auth handles password hashing, sessions and reset flows; session cookies are HTTP-only, Secure and SameSite=Lax.
-- Double-submit CSRF: middleware sets an HttpOnly HMAC-signed cookie; `/api/csrf` returns the raw token to the browser; all mutating routes require it in `x-csrf-token`.
+- Double-submit CSRF: `/api/csrf` issues one HttpOnly HMAC-signed cookie and returns the matching raw token to the browser; all mutating routes require it in `x-csrf-token`. The client fetches a fresh token for every mutation and retries once if a concurrent auth change rotates the cookie.
 - Rate limits on login, registration, password reset, upload, checkout, reports and credit purchases. Limits use Cloudflare KV when the `RATE_LIMIT_KV` binding is present and an in-process LRU fallback locally; keep WAF rate-limit rules as the hard edge layer because KV is eventually consistent.
 - All input is validated with Zod; database access uses PostgREST parameterized queries; user content is rendered escaped by React.
 - Service-role key, Stripe secret key and VirusTotal key exist only in server modules.

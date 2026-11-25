@@ -1,6 +1,5 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { CSRF_COOKIE_NAME_EDGE, newCsrfTokenEdge } from "@/lib/csrf-edge";
 
 /** Defense-in-depth response headers applied to every route. */
 function securityHeaders(): Record<string, string> {
@@ -26,7 +25,11 @@ function securityHeaders(): Record<string, string> {
   };
 }
 
-/** Refresh Supabase sessions, harden cookies, and set the CSRF cookie. */
+/**
+ * Refresh Supabase sessions and harden cookies.
+ * CSRF cookies are issued only by /api/csrf so the returned token and the
+ * browser cookie can never disagree.
+ */
 export async function middleware(req: NextRequest) {
   const response = NextResponse.next({ request: { headers: req.headers } });
   for (const [name, value] of Object.entries(securityHeaders())) {
@@ -57,17 +60,6 @@ export async function middleware(req: NextRequest) {
     },
   });
   await supabase.auth.getUser();
-
-  if (!req.cookies.get(CSRF_COOKIE_NAME_EDGE) && process.env.SESSION_SECRET) {
-    const { cookie } = await newCsrfTokenEdge(process.env.SESSION_SECRET);
-    response.cookies.set(CSRF_COOKIE_NAME_EDGE, cookie, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: isProd,
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
-  }
   return response;
 }
 
