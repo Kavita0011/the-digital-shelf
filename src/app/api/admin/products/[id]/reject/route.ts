@@ -1,3 +1,4 @@
+import { parseUuidParam } from "@/lib/query";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, route } from "@/lib/api";
@@ -9,6 +10,6 @@ export const PATCH = route(async (req: NextRequest, ctx: { params: Promise<{ id:
   assertCsrf(req);
   const admin = await requireRole("admin");
   const { reason } = z.object({ reason: z.string().min(5).max(2000) }).parse(await req.json());
-  const { id } = await ctx.params;
+  const id = parseUuidParam((await ctx.params).id);
   return ok(await transitionProduct(req, admin, id, "rejected", reason));
 });

@@ -1,3 +1,4 @@
+import { parseTokenParam } from "@/lib/query";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireUser, HttpError, requestIp } from "@/lib/auth";
@@ -16,7 +17,7 @@ export const runtime = "nodejs";
 export const GET = async (req: NextRequest, ctx: { params: Promise<{ token: string }> }) => {
   try {
     const user = await requireUser();
-    const { token } = await ctx.params;
+    const token = parseTokenParam((await ctx.params).token);
     const db = getSupabaseAdmin();
 
     const { data: record } = await db.from("downloads")

@@ -1,10 +1,11 @@
+import { parseUuidParam } from "@/lib/query";
 import { ok, route } from "@/lib/api";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { requireUser, HttpError } from "@/lib/auth";
 
 export const GET = route(async (_req: Request, ctx: { params: Promise<{ id: string }> }) => {
   const user = await requireUser();
-  const { id } = await ctx.params;
+  const id = parseUuidParam((await ctx.params).id);
   const db = getSupabaseAdmin();
   const { data } = await db.from("product_files").select("id,product_id,scan_status,scan_provider,scan_result,checksum").eq("id", id).single();
   if (!data) throw new HttpError(404, "Upload not found", "not_found");

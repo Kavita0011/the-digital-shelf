@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { LogoutButton } from "@/components/logout-button";
+import { DeleteAccountButton } from "@/components/delete-account-button";
 import { SUPPORT_EMAIL, SUPPORT_EMAIL_HREF } from "@/lib/site";
 
 export const metadata = { title: "Seller settings" };
@@ -59,6 +60,9 @@ export default async function SellerSettings() {
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Link className="btn-ghost" href="/forgot-password">Reset password</Link>
           <LogoutButton />
+        </div>
+        <div className="mt-6 border-t pt-4">
+          <DeleteAccountButton />
         </div>
       </section>
     </div>

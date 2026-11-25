@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/client-api";
 import { LogoutButton } from "@/components/logout-button";
+import { DeleteAccountButton } from "@/components/delete-account-button";
 import type { AuthenticatedUser } from "@/lib/types";
 
 interface Setting {
@@ -90,6 +91,9 @@ export default function PlatformSettings() {
           <Link className="btn-ghost" href="/notifications">Notifications</Link>
           <Link className="btn-ghost" href="/forgot-password">Reset password</Link>
           <LogoutButton />
+        </div>
+        <div className="mt-6 border-t pt-4">
+          <DeleteAccountButton />
         </div>
       </section>
 

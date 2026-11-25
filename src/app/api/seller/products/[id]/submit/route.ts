@@ -1,3 +1,4 @@
+import { parseUuidParam } from "@/lib/query";
 import { ok, route } from "@/lib/api";
 import { assertCsrf } from "@/lib/csrf";
 import { requireUser, HttpError } from "@/lib/auth";
@@ -9,7 +10,7 @@ export const POST = route(async (req: NextRequest, ctx: { params: Promise<{ id: 
   assertCsrf(req);
   const user = await requireUser();
   if (user.role !== "seller") throw new HttpError(403, "Sellers only", "forbidden");
-  const { id } = await ctx.params;
+  const id = parseUuidParam((await ctx.params).id);
   const db = getSupabaseAdmin();
   const { data: seller } = await db.from("seller_profiles").select("id").eq("user_id", user.id).single();
   const { data: product } = await db.from("products").select("seller_id,status,file_id").eq("id", id).single();

@@ -16,7 +16,7 @@ interface ManagedUser {
 
 export default async function AdminUsersPage() {
   const admin = await getCurrentUser();
-  if (!admin || admin.realRole !== "super_admin" || admin.impersonating) redirect("/admin");
+  if (!admin || (admin.realRole !== "admin" && admin.realRole !== "super_admin") || admin.impersonating) redirect("/admin");
 
   const { data } = await getSupabaseAdmin()
     .from("users")
@@ -36,9 +36,13 @@ export default async function AdminUsersPage() {
     <div>
       <h1 className="text-2xl font-bold">Users and roles</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Change a user’s stored role here. Use the View mode switcher above to preview the buyer, seller, or admin experience without changing any account.
+        Change roles, suspend or ban access, revoke elevated permissions, or delete accounts here. You cannot target your own account or another super admin.
       </p>
-      <UserRoleManager users={users} />
+      <UserRoleManager
+        users={users}
+        currentUserId={admin.id}
+        canChangeRoles={admin.realRole === "super_admin"}
+      />
     </div>
   );
 }

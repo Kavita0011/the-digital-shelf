@@ -8,6 +8,13 @@ test("sanitizeSearchTerm strips PostgREST filter metacharacters", () => {
   assert.equal(safe.replace(/\s+/g, " ").trim(), "100 planner v2 beta");
 });
 
+test("sanitizeSearchTerm strips control characters and null bytes", () => {
+  const safe = sanitizeSearchTerm("bad\0name\nor(id.gt.0)\tend");
+  assert.ok(!/[\u0000-\u001F\u007F]/.test(safe));
+  assert.ok(!safe.includes("("));
+  assert.equal(safe, "bad name or id.gt.0 end");
+});
+
 test("sanitizeSearchTerm trims and truncates to a bounded length", () => {
   assert.equal(sanitizeSearchTerm("  hello  "), "hello");
   assert.equal(sanitizeSearchTerm("x".repeat(200)).length, 120);
@@ -20,6 +27,17 @@ test("buildIlikeFilter cannot inject an additional filter condition", () => {
   assert.equal(filter, "title.ilike.%widget or id.gt.0%,short_description.ilike.%widget or id.gt.0%");
   assert.ok(!filter.includes(",or("));
   assert.ok(!filter.includes("("));
+});
+
+test("buildIlikeFilter rejects columns that are not plain identifiers", () => {
+  assert.throws(
+    () => buildIlikeFilter("book", "title);drop", "short_description"),
+    /Invalid PostgREST filter column/,
+  );
+  assert.throws(
+    () => buildIlikeFilter("book", "title", "short.description.eq.1,or(id.gt.0)"),
+    /Invalid PostgREST filter column/,
+  );
 });
 
 test("buildIlikeFilter respects a custom max length from the caller", () => {

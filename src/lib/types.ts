@@ -3,7 +3,7 @@
 export const ROLES = ["buyer", "seller", "admin", "super_admin"] as const;
 export type Role = (typeof ROLES)[number];
 
-export const USER_STATUSES = ["active", "suspended", "banned"] as const;
+export const USER_STATUSES = ["active", "suspended", "banned", "deleted"] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
 
 export const PRODUCT_STATUSES = [
@@ -37,7 +37,8 @@ export const BLOCKED_EXTENSIONS = [
 ] as const;
 
 export type ScanStatus = "pending" | "scanning" | "clean" | "infected" | "failed" | "skipped";
-export type PaymentStatus = "pending" | "paid" | "failed" | "refunded" | "partially_refunded" | "disputed";
+export const PAYMENT_STATUSES = ["pending", "paid", "failed", "refunded", "partially_refunded", "disputed"] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export type CreditTransactionType =
   | "purchase" | "refund" | "admin_grant" | "admin_deduction"
   | "promotional_bonus" | "referral_bonus" | "reversal" | "expiry";
@@ -51,6 +52,7 @@ export interface Profile {
   status: UserStatus;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
 }
 
 export interface SellerProfile {

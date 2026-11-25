@@ -1,3 +1,4 @@
+import { parseUuidParam } from "@/lib/query";
 import type { NextRequest } from "next/server";
 import { ok, route } from "@/lib/api";
 import { assertCsrf } from "@/lib/csrf";
@@ -21,7 +22,7 @@ export const PATCH = route(async (req: NextRequest, ctx: Ctx) => {
   assertCsrf(req);
   const user = await requireUser();
   if (user.role !== "seller") throw new HttpError(403, "Sellers only", "forbidden");
-  const { id } = await ctx.params;
+  const id = parseUuidParam((await ctx.params).id);
   const product = await assertOwnership(user.id, id);
   if (!["draft", "rejected"].includes(product.status)) throw new HttpError(409, "Product cannot be edited in this state", "invalid_state");
 

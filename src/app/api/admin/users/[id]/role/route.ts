@@ -1,3 +1,4 @@
+import { parseUuidParam } from "@/lib/query";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, route } from "@/lib/api";
@@ -13,7 +14,7 @@ const bodySchema = z.object({ role: z.enum(ROLES) });
 export const PATCH = route(async (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => {
   assertCsrf(req);
   const admin = await requireRole("super_admin");
-  const { id } = await ctx.params;
+  const id = parseUuidParam((await ctx.params).id);
   const { role } = bodySchema.parse(await req.json()) as { role: Role };
 
   const db = getSupabaseAdmin();
