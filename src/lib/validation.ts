@@ -13,7 +13,8 @@ export const registerSchema = z.object({
   acceptedTerms: z.literal(true),
 });
 
-export const loginSchema = z.object({ email, password });
+/** Login must accept any stored password; strength is enforced at set/register time. */
+export const loginSchema = z.object({ email, password: z.string().min(1).max(128) });
 
 export const sellerProfileSchema = z.object({
   storeName: z.string().trim().min(2).max(120),

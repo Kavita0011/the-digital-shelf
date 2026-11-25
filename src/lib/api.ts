@@ -12,8 +12,17 @@ export function fail(error: unknown) {
     return NextResponse.json({ ok: false, error: { code: error.code, message: error.message } }, { status: error.status });
   }
   if (error instanceof ZodError) {
+    const details = error.flatten();
+    const firstIssue = [...Object.values(details.fieldErrors).flat(), ...details.formErrors][0];
     return NextResponse.json(
-      { ok: false, error: { code: "validation_error", message: "Invalid input", details: error.flatten() } },
+      {
+        ok: false,
+        error: {
+          code: "validation_error",
+          message: firstIssue ? `Invalid input: ${firstIssue}` : "Invalid input",
+          details,
+        },
+      },
       { status: 400 },
     );
   }
