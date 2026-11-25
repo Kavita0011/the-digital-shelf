@@ -82,24 +82,36 @@ async function main() {
   const ids: Record<string, string> = {};
   for (const account of ACCOUNTS) ids[account.email] = await ensureUser(account);
 
+  const adminUserId = ids["thedigitalshelf.admin@gmail.com"];
   const buyerId = ids["testuser@example.com"];
   const sellerId = ids["testseller@example.com"];
 
   const { error: buyerProfileError } = await admin
     .from("buyer_profiles")
-    .upsert({ user_id: buyerId }, { onConflict: "user_id" });
+    .upsert([{ user_id: buyerId }, { user_id: adminUserId }], { onConflict: "user_id" });
   if (buyerProfileError) throw buyerProfileError;
 
+  // The super-admin account needs an approved seller profile so view-as seller
+  // mode can open the seller dashboard instead of failing profile lookups.
   const { error: sellerProfileError } = await admin
     .from("seller_profiles")
     .upsert(
-      {
-        user_id: sellerId,
-        store_name: "The Digital Shelf Test Store",
-        bio: "Approved test seller account for demos and QA.",
-        verification_status: "approved",
-        payout_status: "not_connected",
-      },
+      [
+        {
+          user_id: sellerId,
+          store_name: "The Digital Shelf Test Store",
+          bio: "Approved test seller account for demos and QA.",
+          verification_status: "approved",
+          payout_status: "not_connected",
+        },
+        {
+          user_id: adminUserId,
+          store_name: "Admin Preview Store",
+          bio: "Internal profile used by super-admin view-as seller mode.",
+          verification_status: "approved",
+          payout_status: "not_connected",
+        },
+      ],
       { onConflict: "user_id" },
     );
   if (sellerProfileError) throw sellerProfileError;
