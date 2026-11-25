@@ -26,6 +26,8 @@ create policy notifications_self_update on public.notifications
   for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 grant select, update on public.notifications to authenticated;
+-- The server API uses the service-role client and still needs table privileges.
+grant select, update on public.notifications to service_role;
 
 create or replace function public.notify_user(
   p_user_id uuid,
