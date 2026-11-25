@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { apiFetch, clearCsrfTokenCache } from "@/lib/client-api";
+import { apiFetch } from "@/lib/client-api";
 
 export function LoginForm() {
   const [error, setError] = useState("");
@@ -16,7 +16,6 @@ export function LoginForm() {
         body: JSON.stringify({ email: fd.get("email"), password: fd.get("password") }),
       });
       setDone(true);
-      clearCsrfTokenCache();
       window.location.href = "/buyer/dashboard";
     } catch (err) { setError((err as Error).message); }
   }

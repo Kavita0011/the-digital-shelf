@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { apiFetch, clearCsrfTokenCache } from "@/lib/client-api";
+import { apiFetch } from "@/lib/client-api";
 
 export function ResetPasswordForm({ tokenHash }: { tokenHash: string }) {
   const [message, setMessage] = useState("");
@@ -23,7 +23,6 @@ export function ResetPasswordForm({ tokenHash }: { tokenHash: string }) {
         method: "POST",
         body: JSON.stringify({ tokenHash, newPassword: fd.get("newPassword") }),
       });
-      clearCsrfTokenCache();
       setMessage("Password updated. You can now log in.");
     } catch (err) {
       setError((err as Error).message);
