@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { LogoutButton } from "@/components/logout-button";
 
 type Role = "buyer" | "seller" | "admin" | "super_admin";
 
@@ -40,6 +41,7 @@ export function AccountLinks() {
       <>
         <Link href={dashboardFor(role)} className="btn-ghost">Dashboard</Link>
         <Link href="/buyer/settings" className="btn">Account</Link>
+        <LogoutButton />
       </>
     );
   }

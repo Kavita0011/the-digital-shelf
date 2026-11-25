@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { LogoutButton } from "@/components/logout-button";
 
 type Role = "buyer" | "seller" | "admin" | "super_admin";
 
@@ -37,6 +38,7 @@ export function MobileNav() {
     role
       ? { href: dashboardFor(role), label: "Dashboard" }
       : { href: "/login", label: "Log in" },
+    ...(role ? [{ href: "/notifications", label: "Notifications" }] : []),
   ];
 
   return (
@@ -62,6 +64,11 @@ export function MobileNav() {
             <Link href={role ? "/buyer/settings" : "/register"} className="btn mt-2 text-center" onClick={() => setOpen(false)}>
               {role ? "Account" : "Get started"}
             </Link>
+            {role && (
+              <div className="mt-1">
+                <LogoutButton className="text-left text-sm font-medium text-slate-600 hover:text-brand-600" />
+              </div>
+            )}
           </div>
         </nav>
       )}

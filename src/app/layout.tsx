@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SUPPORT_EMAIL, SUPPORT_EMAIL_HREF } from "@/lib/site";
 import { MobileNav } from "@/components/mobile-nav";
 import { AccountLinks } from "@/components/account-links";
+import { NotificationBell } from "@/components/notification-bell";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -30,7 +31,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav aria-label="Primary" className="hidden gap-6 text-sm font-medium text-slate-600 md:flex">
               {nav.map((n) => <Link key={n.href} href={n.href} className="hover:text-brand-600">{n.label}</Link>)}
             </nav>
-            <div className="hidden gap-2 md:flex">
+            <div className="hidden items-center gap-2 md:flex">
+              <NotificationBell />
               <AccountLinks />
             </div>
             <MobileNav />
