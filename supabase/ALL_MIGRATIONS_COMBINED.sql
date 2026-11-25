@@ -633,11 +633,11 @@ grant execute on function freeze_credits(uuid, integer) to service_role;
 -- 5. A single Stripe payment intent covers every order in a multi-item cart,
 -- so orders.stripe_payment_intent_id cannot be unique. Keep the lookup index.
 alter table orders drop constraint if exists orders_stripe_payment_intent_id_key;
-create index if not exists if not exists orders_intent_idx on orders(stripe_payment_intent_id);
+create index if not exists orders_intent_idx on orders(stripe_payment_intent_id);
 
 -- 6. Indexes for the filters used by admin audit logs and coupon lookups.
-create index if not exists if not exists audit_logs_action_idx on audit_logs(action, created_at desc);
-create index if not exists if not exists coupons_code_trgm_idx on coupons using gin (upper(code) gin_trgm_ops);
+create index if not exists audit_logs_action_idx on audit_logs(action, created_at desc);
+create index if not exists coupons_code_trgm_idx on coupons using gin (upper(code) gin_trgm_ops);
 
 
 -- ===== 0004_public_column_privileges.sql =====
@@ -749,12 +749,25 @@ grant execute on function redeem_credits(uuid, integer, uuid, uuid, text) to ser
 alter table public.product_files
   add column if not exists scan_analysis_id text;
 
-create index if not exists if not exists product_files_scan_analysis_idx
+create index if not exists product_files_scan_analysis_idx
   on public.product_files (scan_analysis_id)
   where scan_analysis_id is not null;
 
 comment on column public.product_files.scan_analysis_id is
   'VirusTotal analysis id used by the Cloudflare Queue scan consumer.';
+
+
+-- ===== API role grants =====
+-- Supabase's newer secret keys still map to service_role, which needs explicit
+-- table privileges on schemas created outside the dashboard defaults.
+grant usage on schema public to anon, authenticated, service_role;
+grant all on all tables in schema public to service_role;
+grant all on all sequences in schema public to service_role;
+grant select on all tables in schema public to authenticated;
+grant select on public.categories, public.products, public.product_files to anon;
+
+-- Refresh PostgREST's schema cache so the new tables are available over REST.
+notify pgrst, 'reload schema';
 
 
 
