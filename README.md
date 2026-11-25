@@ -99,7 +99,7 @@ npm run db:bucket      # private product-files bucket
 DEMO_PASSWORD='a-strong-demo-password' npm run db:seed
 ```
 
-`db:accounts` reads `ADMIN_PASSWORD` and `TEST_PASSWORD` from `.env.local`; it never prints passwords. It creates/repairs `thedigitalshelf.admin@gmail.com`, `testuser@example.com`, and `testseller@example.com`. It also gives the admin account an approved preview seller profile so **View mode → Seller** opens the seller dashboard correctly.
+`db:accounts` reads `ADMIN_PASSWORD`, `ADMIN_TEST_PASSWORD`, and `TEST_PASSWORD` from `.env.local`; it never prints passwords. It creates/repairs `thedigitalshelf.admin@gmail.com` (super admin), `testadmin@example.com` (admin), `testuser@example.com` (buyer), and `testseller@example.com` (seller). It also gives the super-admin account an approved preview seller profile so **View mode → Seller** opens the seller dashboard correctly.
 
 If you manage migrations manually, apply the SQL files in `supabase/migrations/` in numeric order (`0001`–`0006`). `0003_security_fixes.sql` removes client-controlled role assignment from the auth trigger, adds atomic coupon/credit RPCs, and lets a single payment intent cover a multi-item cart. `0004_public_column_privileges.sql` restricts the anon key to public-only product/category columns, so a direct `select=*` REST call cannot read internal fields such as rejection notes or file checksums. `0005_webhook_idempotency.sql` makes credit redemption and payment recording safe to retry, and the webhook debits credits before marking an order paid. `0006_cloudflare_scan_queue.sql` adds the VirusTotal analysis id used by the background scan queue.
 

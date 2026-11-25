@@ -6,6 +6,7 @@
  *        NEXT_PUBLIC_SUPABASE_URL=...
  *        SUPABASE_SERVICE_ROLE_KEY=...
  *        ADMIN_PASSWORD=<your chosen password, 12+ chars>
+ *        ADMIN_TEST_PASSWORD=<your chosen password, 12+ chars>
  *        TEST_PASSWORD=<your chosen password, 12+ chars>
  *   2. Run: npm run db:accounts
  *
@@ -21,11 +22,17 @@ config({ path: ".env.local" });
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const adminPassword = process.env.ADMIN_PASSWORD;
+const adminTestPassword = process.env.ADMIN_TEST_PASSWORD;
 const testPassword = process.env.TEST_PASSWORD;
 
-if (!url || !serviceKey || !adminPassword || adminPassword.length < 12 || !testPassword || testPassword.length < 12) {
+if (
+  !url || !serviceKey ||
+  !adminPassword || adminPassword.length < 12 ||
+  !adminTestPassword || adminTestPassword.length < 12 ||
+  !testPassword || testPassword.length < 12
+) {
   throw new Error(
-    "Set NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ADMIN_PASSWORD (12+ chars) and TEST_PASSWORD (12+ chars) in .env.local",
+    "Set NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ADMIN_PASSWORD, ADMIN_TEST_PASSWORD and TEST_PASSWORD (each 12+ chars) in .env.local",
   );
 }
 
@@ -33,6 +40,7 @@ const admin = createClient(url, serviceKey, { auth: { autoRefreshToken: false, p
 
 const ACCOUNTS = [
   { email: "thedigitalshelf.admin@gmail.com", password: adminPassword!, role: "super_admin", name: "Super Admin" },
+  { email: "testadmin@example.com", password: adminTestPassword!, role: "admin", name: "Test Admin" },
   { email: "testuser@example.com", password: testPassword!, role: "buyer", name: "Test Buyer" },
   { email: "testseller@example.com", password: testPassword!, role: "seller", name: "Test Seller" },
 ] as const;
@@ -116,7 +124,7 @@ async function main() {
     );
   if (sellerProfileError) throw sellerProfileError;
 
-  console.log("Admin, buyer, and seller accounts are ready. Passwords were read from .env.local and never printed.");
+  console.log("Super admin, admin, buyer, and seller accounts are ready. Passwords were read from .env.local and never printed.");
 }
 
 main().catch((error) => {
