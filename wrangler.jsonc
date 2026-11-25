@@ -41,7 +41,7 @@
     ]
   },
   "vars": {
-    "NEXT_PUBLIC_APP_URL": "http://localhost:3000",
+    "NEXT_PUBLIC_APP_URL": "https://the-digital-shelf.devappkavita-3d9.workers.dev",
     "NEXT_PUBLIC_SUPABASE_URL": "https://upinvbllzqyzciblwdwe.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_fGmhPoBv61XxHw1nwtT0jA_T-0ua9ke",
     "SUPABASE_STORAGE_BUCKET": "product-files"
