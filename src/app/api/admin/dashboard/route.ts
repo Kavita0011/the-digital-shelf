@@ -15,9 +15,19 @@ export const GET = route(async () => {
       .in("payment_status", ["paid", "partially_refunded", "refunded"]),
     db.from("refunds").select("amount", { count: "exact", head: true }),
     db.from("disputes").select("id", { count: "exact", head: true }).in("status", ["needs_response", "under_review"]),
-    db.from("credit_wallets").select("balance"),
+    db.from("credit_wallets").select("balance,pending_balance"),
   ]);
-  const paidOrders = (orders.data ?? []);
+
+  for (const result of [users, sellers, buyers, products, pending, orders, refunds, disputes, wallets]) {
+    if (result.error) throw result.error;
+  }
+
+  const paidOrders = orders.data ?? [];
+  const creditsInCirculation = (wallets.data ?? []).reduce(
+    (sum, wallet) => sum + Number(wallet.balance) + Number(wallet.pending_balance),
+    0,
+  );
+
   return ok({
     users: users.count ?? 0,
     sellers: sellers.count ?? 0,
@@ -25,10 +35,10 @@ export const GET = route(async () => {
     products: products.count ?? 0,
     pendingReviews: pending.count ?? 0,
     sales: paidOrders.length,
-    revenue: paidOrders.reduce((s, o) => s + Number(o.total_paid), 0),
-    platformFees: paidOrders.reduce((s, o) => s + Number(o.platform_commission), 0),
+    revenue: paidOrders.reduce((sum, order) => sum + Number(order.total_paid), 0),
+    platformFees: paidOrders.reduce((sum, order) => sum + Number(order.platform_commission), 0),
     refunds: refunds.count ?? 0,
     disputes: disputes.count ?? 0,
-    activeCredits: (wallets.data ?? []).reduce((s, w) => s + Number(w.balance), 0),
+    creditsInCirculation,
   });
 });

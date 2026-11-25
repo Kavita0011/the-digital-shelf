@@ -31,8 +31,12 @@ export const POST = route(async (req: NextRequest, ctx: { params: Promise<{ acti
   if (!cfg && action !== "freeze") throw new HttpError(400, "Unknown credit action", "invalid_action");
 
   const db = getSupabaseAdmin();
-  const { data: target } = await db.from("users").select("role").eq("id", body.userId).single();
+  const { data: target, error: targetError } = await db.from("users").select("role").eq("id", body.userId).single();
+  if (targetError) throw targetError;
   if (!target) throw new HttpError(404, "User not found", "not_found");
+  if (target.role !== "buyer") {
+    throw new HttpError(400, "Credits can only be adjusted for buyer accounts", "invalid_target_role");
+  }
   // No self-grants and no adjustments to peers or superiors.
   assertCanManageUser(admin, body.userId, target.role as Role);
 
