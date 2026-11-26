@@ -35,6 +35,7 @@ export interface Database {
           description: string;
           short_description: string;
           category_id: string | null;
+          content_type: string | null;
           tags: string[];
           price: number;
           currency: string;

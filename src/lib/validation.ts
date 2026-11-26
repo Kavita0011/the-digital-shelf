@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CONTENT_TYPES } from "./types";
 
 export const email = z.string().trim().toLowerCase().email().max(255);
 export const password = z.string().min(12).max(128).regex(/[A-Z]/, "uppercase").regex(/[a-z]/, "lowercase").regex(/[0-9]/, "digit");
@@ -28,7 +29,8 @@ export const productDraftSchema = z.object({
   title: z.string().trim().min(3).max(200),
   shortDescription: z.string().trim().min(10).max(300),
   description: z.string().trim().min(20).max(20000),
-  categoryId: uuid.nullable().optional(),
+  categoryId: uuid,
+  contentType: z.enum(CONTENT_TYPES),
   tags: z.array(z.string().trim().min(1).max(40)).max(15).default([]),
   price: z.number().int().min(0).max(1_000_000),
   currency: z.string().length(3).regex(/^[a-z]{3}$/).default("usd"),

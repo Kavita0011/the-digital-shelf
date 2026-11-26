@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { ALLOWED_MIME_TYPES, BLOCKED_EXTENSIONS, type AllowedMimeType } from "./types";
+import { ALLOWED_MIME_TYPES, BLOCKED_EXTENSIONS, mimeTypeForFilename, type AllowedMimeType } from "./types";
 import { HttpError } from "./auth";
 
 const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES ?? 26_214_400); // 25 MB
@@ -28,8 +28,25 @@ export interface InspectedFile {
   size: number;
 }
 
+/**
+ * EPUB is a ZIP container whose first entry must be an uncompressed
+ * `mimetype` file containing `application/epub+zip`. Checking that entry
+ * prevents a generic ZIP from being mislabeled as an ebook.
+ */
+function isEpub(buffer: Buffer): boolean {
+  if (buffer.length < 50) return false;
+  if (![0x50, 0x4b, 0x03, 0x04].every((b, i) => buffer[i] === b)) return false;
+  const nameLength = buffer.readUInt16LE(26);
+  const extraLength = buffer.readUInt16LE(28);
+  if (nameLength !== 8) return false;
+  if (buffer.subarray(30, 38).toString("ascii") !== "mimetype") return false;
+  const contentStart = 30 + nameLength + extraLength;
+  return buffer.subarray(contentStart, contentStart + 20).toString("ascii") === "application/epub+zip";
+}
+
 /** Detect real MIME from bytes; never trust filename or Content-Type alone. */
 export function detectMime(buffer: Buffer): AllowedMimeType | null {
+  if (isEpub(buffer)) return "application/epub+zip";
   for (const sig of MAGIC) {
     const start = sig.offset ?? 0;
     if (buffer.length >= start + sig.bytes.length &&
@@ -62,6 +79,21 @@ function inspectZipOffice(buffer: Buffer): AllowedMimeType | null {
 export function assertDeclaredMime(declared: string, detected: AllowedMimeType): void {
   if (declared !== detected) {
     throw new HttpError(400, `Declared file type (${declared}) does not match detected content (${detected})`, "mime_mismatch");
+  }
+}
+
+/** Stop an upload from declaring a different type than its file extension. */
+export function assertMimeMatchesFilename(originalName: string, declared: string): void {
+  const expected = mimeTypeForFilename(originalName);
+  if (!expected) {
+    throw new HttpError(400, "Unsupported file extension", "unsupported_file_type");
+  }
+  if (expected !== declared) {
+    throw new HttpError(
+      400,
+      `File extension indicates ${expected} but ${declared} was declared`,
+      "filename_mime_mismatch",
+    );
   }
 }
 

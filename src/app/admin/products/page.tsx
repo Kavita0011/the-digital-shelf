@@ -9,7 +9,7 @@ export default function AdminProducts() {
       </div>
       <AdminTable
         endpoint="/api/admin/products"
-        columns={["title", "status", "price", "created_at"]}
+        columns={["title", "content_type", "status", "price", "created_at"]}
         actions={(row, refresh) => {
           const id = String(row.id ?? "");
           const status = String(row.status ?? "");

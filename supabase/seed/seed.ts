@@ -42,12 +42,12 @@ async function main() {
 
   await admin.from("buyer_profiles").upsert({ user_id: buyerUserId }, { onConflict: "user_id" });
 
-  const { data: category } = await admin.from("categories").select("id").eq("slug", "notion-templates").single();
+  const { data: category } = await admin.from("categories").select("id").eq("slug", "planners-printables").single();
 
   const demoProducts = [
-    { title: "Ultimate Notion Planner", short: "A complete productivity system for Notion users.", price: 1900, status: "approved" },
-    { title: "Minimalist Resume Kit", short: "Clean, ATS-friendly resume templates.", price: 1200, status: "pending_review" },
-    { title: "Social Media Starter Pack", short: "30 editable templates for modern brands.", price: 2900, status: "rejected", rejection_reason: "Preview image quality too low." },
+    { title: "Ultimate Notion Planner", short: "A complete productivity system for Notion users.", price: 1900, status: "approved", contentType: "planner_printable" },
+    { title: "Minimalist Resume Kit", short: "Clean, ATS-friendly resume templates.", price: 1200, status: "pending_review", contentType: "document" },
+    { title: "Social Media Starter Pack", short: "30 editable templates for modern brands.", price: 2900, status: "rejected", contentType: "template", rejection_reason: "Preview image quality too low." },
   ];
   for (const p of demoProducts) {
     const slug = `${p.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-demo`;
@@ -60,6 +60,7 @@ async function main() {
       description: `${p.short} Includes detailed instructions, editable source files, and lifetime updates. Designed for creators who value clean layout and practical structure.`,
       short_description: p.short,
       category_id: category?.id ?? null,
+      content_type: p.contentType,
       tags: ["template", "productivity"],
       price: p.price,
       currency: "usd",

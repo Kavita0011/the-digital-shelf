@@ -6,7 +6,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { HttpError, requireUser, requestIp } from "@/lib/auth";
 import { ALLOWED_MIME_TYPES } from "@/lib/types";
 import { rateLimit } from "@/lib/rate-limit";
-import { assertSafeFilename, safeStoredName, storagePath } from "@/lib/file-security";
+import { assertMimeMatchesFilename, assertSafeFilename, safeStoredName, storagePath } from "@/lib/file-security";
 import { presignUpload } from "@/lib/storage";
 import { audit } from "@/lib/audit";
 
@@ -26,6 +26,7 @@ export const POST = route(async (req: NextRequest) => {
 
   const body = bodySchema.parse(await req.json());
   assertSafeFilename(body.originalFilename);
+  assertMimeMatchesFilename(body.originalFilename, body.mimeType);
 
   // Verify the product belongs to this seller and is in an editable state.
   const { data: product } = await getSupabaseAdmin()

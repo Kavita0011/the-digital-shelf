@@ -16,7 +16,7 @@ test("public product projection excludes internal-only columns", () => {
     assert.ok(!columns.includes(sensitive), `${sensitive} must not be publicly selectable`);
   }
   // Columns needed by the public detail page are still present.
-  for (const required of ["id", "seller_id", "title", "slug", "price", "preview_image_url", "view_count"]) {
+  for (const required of ["id", "seller_id", "title", "slug", "price", "preview_image_url", "view_count", "content_type"]) {
     assert.ok(columns.includes(required), `${required} is required by the public page`);
   }
 });

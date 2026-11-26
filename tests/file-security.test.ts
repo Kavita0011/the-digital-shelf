@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   assertDeclaredMime,
+  assertMimeMatchesFilename,
   assertSafeFilename,
   detectMime,
   inspectFile,
@@ -35,4 +36,27 @@ test("inspection computes a sha256 checksum and a UUID storage name", () => {
   assert.equal(result.checksum.length, 64);
   assert.match(result.checksum, /^[a-f0-9]{64}$/);
   assert.match(safeStoredName("cover.png"), /^[0-9a-f-]{36}\.png$/);
+});
+
+function fakeEpub(): Buffer {
+  const buf = Buffer.alloc(58);
+  Buffer.from([0x50, 0x4b, 0x03, 0x04]).copy(buf, 0);
+  buf.writeUInt16LE(8, 26); // first entry name length: "mimetype"
+  buf.writeUInt16LE(0, 28); // no extra field
+  buf.write("mimetype", 30, "ascii");
+  buf.write("application/epub+zip", 38, "ascii");
+  return buf;
+}
+
+test("EPUB containers are detected as ebooks, not generic ZIP files", () => {
+  const epub = fakeEpub();
+  assert.equal(detectMime(epub), "application/epub+zip");
+  assert.equal(inspectFile(epub, "guide.epub").detectedMime, "application/epub+zip");
+  assert.equal(detectMime(zip), "application/zip");
+});
+
+test("declared MIME must match the filename extension", () => {
+  assert.doesNotThrow(() => assertMimeMatchesFilename("guide.epub", "application/epub+zip"));
+  assert.throws(() => assertMimeMatchesFilename("guide.epub", "application/pdf"));
+  assert.throws(() => assertMimeMatchesFilename("payload.unknown", "application/zip"));
 });

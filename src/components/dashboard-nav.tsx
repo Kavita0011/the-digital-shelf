@@ -1,9 +1,9 @@
 import Link from "next/link";
 
 const buyerLinks = [
-  ["/buyer/dashboard", "Overview"], ["/buyer/purchases", "Purchases"], ["/buyer/downloads", "Downloads"],
-  ["/buyer/payments", "Payment history"], ["/buyer/credits", "Credit wallet"], ["/buyer/credit-history", "Credit history"],
-  ["/buyer/settings", "Settings"], ["/notifications", "Notifications"],
+  ["/buyer/purchases", "My products"], ["/buyer/downloads", "Downloads"], ["/products", "Browse products"],
+  ["/buyer/dashboard", "Overview"], ["/buyer/payments", "Payment history"], ["/buyer/credits", "Credit wallet"],
+  ["/buyer/credit-history", "Credit history"], ["/buyer/settings", "Settings"], ["/notifications", "Notifications"],
 ];
 const sellerLinks = [
   ["/seller/dashboard", "Overview"], ["/seller/products", "My products"], ["/seller/upload", "Upload product"],

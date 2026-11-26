@@ -1,8 +1,19 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/client-api";
+import { contentTypeLabel } from "@/lib/types";
 
 export type TableRow = { id?: string } & Record<string, unknown>;
+
+function columnLabel(column: string): string {
+  return column.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function cellValue(column: string, value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (column === "content_type") return contentTypeLabel(value);
+  return String(value);
+}
 
 interface Props {
   endpoint: string;
@@ -30,14 +41,14 @@ export function AdminTable({ endpoint, columns, actions }: Props) {
       <table className="w-full text-left text-sm">
         <thead className="bg-slate-50 text-slate-500">
           <tr>
-            {columns.map((c) => <th className="p-3" key={c}>{c}</th>)}
+            {columns.map((c) => <th className="p-3" key={c}>{columnLabel(c)}</th>)}
             {actions && <th className="p-3">Actions</th>}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
             <tr className="border-t" key={row.id ?? i}>
-              {columns.map((c) => <td className="max-w-xs truncate p-3" key={c}>{String(row[c] ?? "—")}</td>)}
+              {columns.map((c) => <td className="max-w-xs truncate p-3" key={c}>{cellValue(c, row[c])}</td>)}
               {actions && <td className="p-3">{actions(row, () => { void refresh(); })}</td>}
             </tr>
           ))}

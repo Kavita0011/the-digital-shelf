@@ -24,7 +24,7 @@ export const GET = route(async () => {
   const seller = await sellerIdFor(user.id);
   const { data, error } = await getSupabaseAdmin()
     .from("products")
-    .select("id,title,slug,status,price,currency,file_format,file_size,created_at")
+    .select("id,title,slug,status,price,currency,category_id,content_type,file_format,file_size,created_at")
     .eq("seller_id", seller.id).order("created_at", { ascending: false });
   if (error) throw error;
   return ok(data);
@@ -53,7 +53,8 @@ export const POST = route(async (req: NextRequest) => {
     slug: slugify(body.title),
     description: body.description,
     short_description: body.shortDescription,
-    category_id: body.categoryId ?? null,
+    category_id: body.categoryId,
+    content_type: body.contentType,
     tags: body.tags,
     price: body.price,
     currency: body.currency,

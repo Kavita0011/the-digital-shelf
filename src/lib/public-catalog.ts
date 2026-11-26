@@ -9,6 +9,6 @@
  */
 
 export const PUBLIC_PRODUCT_COLUMNS =
-  "id,seller_id,title,slug,description,short_description,category_id,tags,price,currency,status,preview_image_url,file_format,file_size,license_type,is_featured,view_count,created_at,approved_at";
+  "id,seller_id,title,slug,description,short_description,category_id,content_type,tags,price,currency,status,preview_image_url,file_format,file_size,license_type,is_featured,view_count,created_at,approved_at";
 
 export const PUBLIC_CATEGORY_COLUMNS = "id,name,slug,description";

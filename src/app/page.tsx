@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   const products = await safePublicRead(
     (db) => db.from("products")
-      .select("id,title,slug,short_description,price,currency,preview_image_url")
+      .select("id,title,slug,short_description,price,currency,preview_image_url,content_type")
       .eq("status", "approved")
       .order("is_featured", { ascending: false })
       .limit(8)

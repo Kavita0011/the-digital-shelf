@@ -2,16 +2,31 @@
 
 import { useState } from "react";
 import { apiFetch } from "@/lib/client-api";
-import type { ScanStatus } from "@/lib/types";
+import {
+  CONTENT_TYPES,
+  CONTENT_TYPE_DESCRIPTIONS,
+  CONTENT_TYPE_LABELS,
+  mimeTypeForFilename,
+  type ContentType,
+  type ScanStatus,
+} from "@/lib/types";
 
 const STEPS = ["Details", "File", "Review & submit"];
 const SCAN_TIMEOUT_MS = 15 * 60 * 1000;
 const SCAN_POLL_MS = 5_000;
+const ALL_FILES = ".pdf,.epub,.png,.jpg,.jpeg,.webp,.zip,.mp4,.mp3,.docx,.xlsx,.pptx";
 
-export function UploadWizard() {
+interface CategoryOption {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
+export function UploadWizard({ categories }: { categories: CategoryOption[] }) {
   const [step, setStep] = useState(0);
   const [productId, setProductId] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [contentType, setContentType] = useState<ContentType | "">("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -23,7 +38,8 @@ export function UploadWizard() {
         method: "POST",
         body: JSON.stringify({
           title: fd.get("title"), shortDescription: fd.get("shortDescription"), description: fd.get("description"),
-          categoryId: fd.get("categoryId") || null, tags: String(fd.get("tags") ?? "").split(",").map(t=>t.trim()).filter(Boolean),
+          categoryId: fd.get("categoryId"), contentType: fd.get("contentType"),
+          tags: String(fd.get("tags") ?? "").split(",").map(t=>t.trim()).filter(Boolean),
           price: Math.round(Number(fd.get("price")) * 100), currency: "usd", licenseType: fd.get("licenseType"),
           refundPolicy: fd.get("refundPolicy"), copyrightConfirmed: true, safetyPolicyConfirmed: true,
         }),
@@ -37,11 +53,16 @@ export function UploadWizard() {
     setBusy(true); setMessage("Uploading securely…");
     try {
       const checksum = await sha256(file);
+      const declaredMime = mimeTypeForFilename(file.name) ?? file.type;
       const presign = await apiFetch<{ uploadUrl: string; path: string; fileId: string }>("/api/uploads/presign", {
         method: "POST",
-        body: JSON.stringify({ productId, originalFilename: file.name, mimeType: file.type, size: file.size, checksum }),
+        body: JSON.stringify({ productId, originalFilename: file.name, mimeType: declaredMime, size: file.size, checksum }),
       });
-      const put = await fetch(presign.uploadUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
+      const put = await fetch(presign.uploadUrl, {
+        method: "PUT",
+        headers: { "content-type": declaredMime },
+        body: file,
+      });
       if (!put.ok) throw new Error("Upload failed");
 
       setMessage("Submitting file for malware scanning…");
@@ -78,18 +99,52 @@ export function UploadWizard() {
         <div><label className="label">Short description</label><input className="input" name="shortDescription" required minLength={10} /></div>
         <div><label className="label">Full description</label><textarea className="input" name="description" rows={6} required minLength={20} /></div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div><label className="label">Category ID (optional)</label><input className="input" name="categoryId" placeholder="uuid" /></div>
-          <div><label className="label">Price (USD)</label><input className="input" name="price" type="number" min="0" step="0.01" required /></div>
+          <div>
+            <label className="label">Category</label>
+            <select className="input" name="categoryId" required defaultValue="">
+              <option value="" disabled>Choose a topic</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">What the product is for. Tools and brands belong in tags, not categories.</p>
+          </div>
+          <div>
+            <label className="label">Content type</label>
+            <select
+              className="input"
+              name="contentType"
+              required
+              value={contentType}
+              onChange={(e) => setContentType(e.target.value as ContentType | "")}
+            >
+              <option value="" disabled>Choose a format</option>
+              {CONTENT_TYPES.map((type) => <option key={type} value={type}>{CONTENT_TYPE_LABELS[type]}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">What the buyer gets and how they use it — not the file extension.</p>
+          </div>
         </div>
-        <div><label className="label">Tags (comma separated)</label><input className="input" name="tags" /></div>
+        {contentType && <p className="rounded-lg bg-brand-50 p-3 text-sm text-brand-800">{CONTENT_TYPE_DESCRIPTIONS[contentType]}</p>}
+        {categories.length === 0 && <p className="text-sm text-red-600">No categories are configured yet. Ask an admin to apply the category taxonomy migration.</p>}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div><label className="label">Price (USD)</label><input className="input" name="price" type="number" min="0" step="0.01" required /></div>
+          <div><label className="label">Tags (comma separated)</label><input className="input" name="tags" placeholder="notion, budgeting, beginner" /></div>
+        </div>
         <div><label className="label">License type</label><select className="input" name="licenseType"><option value="personal">Personal use</option><option value="commercial">Commercial use</option><option value="extended_commercial">Extended commercial use</option></select></div>
         <div><label className="label">Refund / support policy</label><textarea className="input" name="refundPolicy" rows={3} required minLength={10} /></div>
         <label className="flex gap-2 text-sm"><input type="checkbox" required /> I confirm copyright ownership and accept the upload safety policy.</label>
         <button className="btn" disabled={busy}>{busy?"Saving…":"Continue to file upload"}</button>
       </form>}
       {step === 1 && <div className="space-y-4">
-        <p className="text-sm text-slate-600">PDF, PNG, JPG, WEBP, ZIP, MP4, MP3, DOCX, XLSX or PPTX · max 25 MB.</p>
-        <input className="input" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.zip,.mp4,.mp3,.docx,.xlsx,.pptx" onChange={e=>setFile(e.target.files?.[0]??null)} />
+        <p className="text-sm text-slate-600">
+          {contentType === "ebook"
+            ? "Ebooks work best as EPUB or PDF. Use ZIP only when the ebook includes extra files. Max 25 MB."
+            : "PDF, EPUB, PNG, JPG, WEBP, ZIP, MP4, MP3, DOCX, XLSX or PPTX · max 25 MB."}
+        </p>
+        <input
+          className="input"
+          type="file"
+          accept={contentType === "ebook" ? ".epub,.pdf,.zip" : ALL_FILES}
+          onChange={e=>setFile(e.target.files?.[0]??null)}
+        />
         <button className="btn" disabled={!file||busy} onClick={uploadFile}>{busy?"Processing…":"Upload & scan"}</button>
       </div>}
       {step === 2 && <div><p className="text-slate-600">Your file passed automated scanning. Submit it for mandatory admin review.</p><button className="btn mt-4" disabled={busy} onClick={submitForReview}>Submit for review</button></div>}
