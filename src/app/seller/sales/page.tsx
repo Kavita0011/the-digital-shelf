@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
@@ -5,6 +6,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 export const metadata = { title: "Sales" };
 
 interface SaleRow {
+  id: string;
   order_number: string;
   total_paid: number;
   seller_earnings: number;
@@ -20,10 +22,10 @@ export default async function SalesPage() {
     .from("seller_profiles").select("id").eq("user_id", user.id).single();
   if (!seller) redirect("/sell");
   const { data } = await getSupabaseAdmin().from("orders")
-    .select("order_number,total_paid,seller_earnings,platform_commission,payment_status,products(title)")
+    .select("id,order_number,total_paid,seller_earnings,platform_commission,payment_status,products(title)")
     .eq("seller_id", seller.id).order("created_at", { ascending: false });
   const rows = (data ?? []) as unknown as SaleRow[];
-  const columns = ["Order", "Product", "Gross", "Commission", "Net", "Status"];
+  const columns = ["Order", "Product", "Gross", "Commission", "Net", "Status", "Invoice"];
   return (
     <>
       <h1 className="text-2xl font-bold">Sales</h1>
@@ -41,6 +43,7 @@ export default async function SalesPage() {
                 <td className="p-3">${(Number(o.platform_commission) / 100).toFixed(2)}</td>
                 <td className="p-3">${(Number(o.seller_earnings) / 100).toFixed(2)}</td>
                 <td className="p-3 capitalize">{o.payment_status}</td>
+                <td className="p-3"><Link className="text-brand-600 hover:underline" href={`/invoices/${o.id}`}>Invoice</Link></td>
               </tr>
             ))}
           </tbody>

@@ -11,3 +11,11 @@ body { @apply bg-slate-50 text-ink antialiased; }
 .input { @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20; }
 .label { @apply mb-1 block text-sm font-medium text-slate-700; }
 .badge { @apply inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium; }
+
+@media print {
+  @page { size: A4; margin: 16mm; }
+  body { @apply bg-white text-black; }
+  .no-print { display: none !important; }
+  .invoice-sheet { @apply m-0 max-w-none rounded-none border-0 p-0 shadow-none; }
+  a { @apply text-black no-underline; }
+}
