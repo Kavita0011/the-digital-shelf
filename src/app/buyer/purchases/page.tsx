@@ -3,9 +3,12 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { DownloadLink } from "@/components/download-link";
+import { Pagination, pageHref, parsePageParam, type PageSearchParams } from "@/components/pagination";
 import { contentTypeLabel } from "@/lib/types";
 
 export const metadata = { title: "Purchases" };
+
+const PAGE_SIZE = 10;
 
 interface PurchaseRow {
   id: string;
@@ -24,13 +27,17 @@ interface PurchaseRow {
 
 interface SellerRow { id: string; store_name: string }
 
-export default async function PurchasesPage() {
+export default async function PurchasesPage({ searchParams }: { searchParams: Promise<PageSearchParams> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const params = await searchParams;
+  const page = parsePageParam(params.page);
+  const from = (page - 1) * PAGE_SIZE;
   const db = getSupabaseAdmin();
-  const { data } = await db.from("orders")
-    .select("id,order_number,total_paid,payment_status,created_at,products(title,slug,content_type,file_format,seller_id)")
-    .eq("buyer_id", user.id).order("created_at", { ascending: false });
+  const { data, count } = await db.from("orders")
+    .select("id,order_number,total_paid,payment_status,created_at,products(title,slug,content_type,file_format,seller_id)", { count: "exact" })
+    .eq("buyer_id", user.id).order("created_at", { ascending: false })
+    .range(from, from + PAGE_SIZE - 1);
   const rows = (data ?? []) as unknown as PurchaseRow[];
 
   const sellerIds = [...new Set(rows.map((o) => o.products?.seller_id).filter((id): id is string => Boolean(id)))];
@@ -83,6 +90,13 @@ export default async function PurchasesPage() {
           })}
         </div>
       )}
+      <Pagination
+        page={page}
+        pageSize={PAGE_SIZE}
+        total={count ?? 0}
+        makeHref={(targetPage) => pageHref("/buyer/purchases", params, targetPage)}
+        noun="purchases"
+      />
     </>
   );
 }

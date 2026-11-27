@@ -6,6 +6,7 @@ import { BuyButton } from "@/components/buy-button";
 import { AddToCartButton } from "@/components/cart-controls";
 import { contentTypeDescription, contentTypeLabel } from "@/lib/types";
 import { categoryIcon } from "@/lib/category-taxonomy";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,14 @@ export default async function ProductDetail({ params }: { params: Promise<{ slug
     null,
   );
   if (!product) notFound();
+
+  // Best-effort analytics: the atomic RPC locks the row, and a counter failure
+  // must never prevent buyers from seeing an approved product.
+  try {
+    await getSupabaseAdmin().rpc("increment_view_count", { p_product_id: product.id });
+  } catch (error) {
+    console.warn("Could not record product view", error);
+  }
 
   const [seller, category] = await Promise.all([
     safePublicRead(

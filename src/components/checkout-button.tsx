@@ -3,7 +3,15 @@
 import { useState } from "react";
 import { apiFetch } from "@/lib/client-api";
 
-export function CheckoutButton({ productIds }: { productIds: string[] }) {
+export function CheckoutButton({
+  productIds,
+  couponCode,
+  creditsToUse,
+}: {
+  productIds: string[];
+  couponCode?: string;
+  creditsToUse?: number;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -11,9 +19,17 @@ export function CheckoutButton({ productIds }: { productIds: string[] }) {
     setBusy(true);
     setError("");
     try {
+      const payload: Record<string, unknown> = {
+        items: productIds.map((productId) => ({ productId })),
+      };
+      // Only send optional fields when the caller actually has them; the API
+      // always reloads prices, discounts and wallet balances server-side.
+      if (couponCode) payload.couponCode = couponCode;
+      if (creditsToUse !== undefined) payload.creditsToUse = creditsToUse;
+
       const data = await apiFetch<{ checkoutUrl: string }>("/api/checkout", {
         method: "POST",
-        body: JSON.stringify({ items: productIds.map((productId) => ({ productId })) }),
+        body: JSON.stringify(payload),
       });
       window.location.href = data.checkoutUrl;
     } catch (err) {

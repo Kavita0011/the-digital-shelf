@@ -122,7 +122,7 @@ export type ScanStatus = "pending" | "scanning" | "clean" | "infected" | "failed
 export const PAYMENT_STATUSES = ["pending", "paid", "failed", "refunded", "partially_refunded", "disputed"] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export type CreditTransactionType =
-  | "purchase" | "refund" | "admin_grant" | "admin_deduction"
+  | "purchase" | "spend" | "refund" | "admin_grant" | "admin_deduction"
   | "promotional_bonus" | "referral_bonus" | "reversal" | "expiry";
 export type CreditTransactionStatus = "completed" | "pending" | "reversed" | "expired" | "frozen";
 

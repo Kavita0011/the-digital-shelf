@@ -1,7 +1,6 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, route } from "@/lib/api";
-import { assertCsrf } from "@/lib/csrf";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { HttpError, requireUser, requestIp } from "@/lib/auth";
 import { ALLOWED_MIME_TYPES } from "@/lib/types";
@@ -19,7 +18,6 @@ const bodySchema = z.object({
 });
 
 export const POST = route(async (req: NextRequest) => {
-  assertCsrf(req);
   const user = await requireUser();
   if (user.role !== "seller") throw new HttpError(403, "Only sellers can upload products", "forbidden");
   await rateLimit(`upload:${user.id}`, 20, 60 * 60 * 1000);
@@ -31,7 +29,7 @@ export const POST = route(async (req: NextRequest) => {
   // Verify the product belongs to this seller and is in an editable state.
   const { data: product } = await getSupabaseAdmin()
     .from("products")
-    .select("id,status,seller_id")
+    .select("id,status,seller_id,file_id")
     .eq("id", body.productId)
     .single();
   if (!product) throw new HttpError(404, "Product not found", "not_found");
@@ -57,8 +55,10 @@ export const POST = route(async (req: NextRequest) => {
   }).select("id").single();
   if (fileError) throw fileError;
 
+  // A new upload supersedes any previous file and clears stale moderation
+  // feedback, so an old clean scan can never be reused for resubmission.
   await getSupabaseAdmin().from("products").update({
-    file_id: fileRecord.id, status: "uploading",
+    file_id: fileRecord.id, status: "uploading", rejection_reason: null,
     file_format: body.originalFilename.split(".").pop() ?? null,
     file_size: body.size, file_checksum: body.checksum,
   }).eq("id", body.productId);
@@ -66,7 +66,7 @@ export const POST = route(async (req: NextRequest) => {
   await audit({
     actorId: user.id, actorRole: user.role, action: "upload.presigned",
     targetType: "product", targetId: body.productId,
-    metadata: { path, originalFilename: body.originalFilename, size: body.size },
+    metadata: { path, originalFilename: body.originalFilename, size: body.size, replacedFileId: product.file_id },
     ip: requestIp(req), userAgent: req.headers.get("user-agent"),
   });
 

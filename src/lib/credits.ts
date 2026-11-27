@@ -2,7 +2,12 @@ import { getSupabaseAdmin } from "./supabase";
 import { HttpError } from "./auth";
 import type { CreditTransactionType } from "./types";
 
-/** Append a credit transaction and let the DB trigger move the wallet balance. */
+/**
+ * Append a credit transaction and let the DB trigger move the wallet balance.
+ * Checkout spends go through the `redeem_credits` RPC, which records a
+ * `spend` type (migration 0010) under a wallet row lock. `purchase` means
+ * buying credits and must not be reused for debits.
+ */
 export async function addCreditTransaction(params: {
   userId: string;
   amount: number; // signed, in credit units (1 credit = $0.01)

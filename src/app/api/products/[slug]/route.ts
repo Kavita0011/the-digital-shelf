@@ -13,6 +13,7 @@ export const GET = route(async (_req: Request, ctx: { params: Promise<{ slug: st
 
   const { data: seller } = await db.from("seller_profiles")
     .select("store_name,bio,profile_image").eq("id", product.seller_id).single();
-  await db.from("products").update({ view_count: (product.view_count ?? 0) + 1 }).eq("id", product.id);
+  // Views are counted by increment_view_count() on the server-rendered detail
+  // page. Keep this read-only API response free of racy counter writes.
   return ok({ product, seller });
 });

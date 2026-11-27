@@ -3,9 +3,12 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { DownloadLink } from "@/components/download-link";
+import { Pagination, pageHref, parsePageParam, type PageSearchParams } from "@/components/pagination";
 import { contentTypeLabel } from "@/lib/types";
 
 export const metadata = { title: "Downloads" };
+
+const PAGE_SIZE = 12;
 
 interface DownloadRow {
   id: string;
@@ -16,12 +19,16 @@ interface DownloadRow {
   orders: { order_number: string } | null;
 }
 
-export default async function DownloadsPage() {
+export default async function DownloadsPage({ searchParams }: { searchParams: Promise<PageSearchParams> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  const { data } = await getSupabaseAdmin().from("downloads")
-    .select("id,order_id,downloaded_at,expires_at,products(title,slug,content_type,file_format),orders(order_number)")
-    .eq("user_id", user.id).order("expires_at", { ascending: false }).limit(100);
+  const params = await searchParams;
+  const page = parsePageParam(params.page);
+  const from = (page - 1) * PAGE_SIZE;
+  const { data, count } = await getSupabaseAdmin().from("downloads")
+    .select("id,order_id,downloaded_at,expires_at,products(title,slug,content_type,file_format),orders(order_number)", { count: "exact" })
+    .eq("user_id", user.id).order("expires_at", { ascending: false })
+    .range(from, from + PAGE_SIZE - 1);
   const rows = (data ?? []) as unknown as DownloadRow[];
 
   return (
@@ -54,6 +61,13 @@ export default async function DownloadsPage() {
           ))}
         </div>
       )}
+      <Pagination
+        page={page}
+        pageSize={PAGE_SIZE}
+        total={count ?? 0}
+        makeHref={(targetPage) => pageHref("/buyer/downloads", params, targetPage)}
+        noun="downloads"
+      />
     </>
   );
 }

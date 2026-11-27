@@ -1,12 +1,24 @@
 import Link from "next/link";
+import { z } from "zod";
 import { safePublicRead } from "@/lib/safe-data";
 import { buildIlikeFilter } from "@/lib/search";
 import { ProductCard } from "@/components/product-card";
+import { Pagination, pageHref, type PageSearchParams } from "@/components/pagination";
 import { PUBLIC_CATEGORY_COLUMNS } from "@/lib/public-catalog";
 import { CONTENT_TYPES, CONTENT_TYPE_LABELS, type ContentType } from "@/lib/types";
 import { uuid } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
+
+const DEFAULT_LIMIT = 24;
+const querySchema = z.object({
+  page: z.coerce.number().int().min(1).max(10_000).default(1).catch(1),
+  limit: z.coerce.number().int().min(1).max(48).default(DEFAULT_LIMIT).catch(DEFAULT_LIMIT),
+});
+
+function firstValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 interface CategoryOption {
   id: string;
@@ -16,18 +28,25 @@ interface CategoryOption {
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string; contentType?: string; q?: string }>;
+  searchParams: Promise<PageSearchParams>;
 }) {
   const params = await searchParams;
-  const categoryId = params.category && uuid.safeParse(params.category).success ? params.category : "";
-  const contentType = CONTENT_TYPES.find((type) => type === params.contentType) ?? "";
-  const term = params.q?.trim() ?? "";
+  const { page, limit } = querySchema.parse({
+    page: firstValue(params.page),
+    limit: firstValue(params.limit),
+  });
+  const rawCategory = firstValue(params.category);
+  const categoryId = rawCategory && uuid.safeParse(rawCategory).success ? rawCategory : "";
+  const contentType = CONTENT_TYPES.find((type) => type === firstValue(params.contentType)) ?? "";
+  const term = firstValue(params.q)?.trim() ?? "";
+  const from = (page - 1) * limit;
 
-  const { products, categories } = await safePublicRead(
+  const { products, categories, total } = await safePublicRead(
     async (db) => {
       let query = db.from("products")
-        .select("id,title,slug,short_description,price,currency,preview_image_url,content_type")
-        .eq("status", "approved").order("created_at", { ascending: false }).limit(48);
+        .select("id,title,slug,short_description,price,currency,preview_image_url,content_type", { count: "exact" })
+        .eq("status", "approved").order("created_at", { ascending: false })
+        .range(from, from + limit - 1);
       if (categoryId) query = query.eq("category_id", categoryId);
       if (contentType) query = query.eq("content_type", contentType);
       if (term) query = query.or(buildIlikeFilter(term, "title", "short_description", 80));
@@ -39,13 +58,22 @@ export default async function ProductsPage({
       return {
         products: (productResult.data ?? []) as Array<Record<string, unknown>>,
         categories: (categoryResult.data ?? []) as CategoryOption[],
+        total: productResult.count ?? 0,
       };
     },
-    { products: [] as Array<Record<string, unknown>>, categories: [] as CategoryOption[] },
+    { products: [] as Array<Record<string, unknown>>, categories: [] as CategoryOption[], total: 0 },
   );
 
   const hasFilters = Boolean(categoryId || contentType || term);
   const currentCategory = categories.find((c) => c.id === categoryId);
+  const makeHref = (targetPage: number) => {
+    const pagingParams: PageSearchParams = {};
+    if (term) pagingParams.q = term;
+    if (categoryId) pagingParams.category = categoryId;
+    if (contentType) pagingParams.contentType = contentType;
+    if (limit !== DEFAULT_LIMIT) pagingParams.limit = String(limit);
+    return pageHref("/products", pagingParams, targetPage);
+  };
 
   return (
     <div className="container-page py-12">
@@ -91,6 +119,7 @@ export default async function ProductsPage({
           <Link className="btn mt-4" href="/products">Browse everything</Link>
         </div>
       )}
+      <Pagination page={page} pageSize={limit} total={total} makeHref={makeHref} noun="products" />
     </div>
   );
 }

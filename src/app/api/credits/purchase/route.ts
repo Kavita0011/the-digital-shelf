@@ -9,6 +9,17 @@ import { getServerEnv } from "@/lib/env";
 
 const PACKS: Record<string, number> = { small: 1000, medium: 5000, large: 10000 }; // cents
 
+/** Public-safe metadata derived from the same PACKS the checkout uses (1 credit = $0.01). */
+const CREDIT_PACKS = Object.entries(PACKS).map(([id, priceCents]) => ({
+  id,
+  credits: priceCents,
+  priceCents,
+  label: `${priceCents.toLocaleString("en-US")} credits · $${(priceCents / 100).toFixed(2)}`,
+}));
+
+/** Lets the wallet list every configured pack without hardcoding prices in the UI. */
+export const GET = route(async () => ok({ packs: CREDIT_PACKS }));
+
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
   const user = await requireUser();
