@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/client-api";
 import { LogoutButton } from "@/components/logout-button";
 import { DeleteAccountButton } from "@/components/delete-account-button";
+import { AccountSecurityPanel } from "@/components/account-security-panel";
 import type { AuthenticatedUser } from "@/lib/types";
 
 interface Setting {
@@ -96,6 +97,10 @@ export default function PlatformSettings() {
           <DeleteAccountButton />
         </div>
       </section>
+
+      <div className="max-w-2xl">
+        <AccountSecurityPanel />
+      </div>
 
       <section className="card max-w-2xl p-6">
         <h2 className="font-semibold">Platform settings (super admin)</h2>

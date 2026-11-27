@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/client-api";
+import { emitNotificationsChanged } from "@/lib/notification-events";
 import type { Notification } from "@/lib/types";
 
 type NotificationResponse = {
   notifications: Notification[];
   unreadCount: number;
 };
+
+type MarkReadResponse = NotificationResponse & { updated: boolean };
 
 const TYPE_LABELS: Record<Notification["type"], string> = {
   order: "Order",
@@ -31,14 +34,19 @@ export default function NotificationsPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const applyData = useCallback((next: NotificationResponse) => {
+    setData(next);
+    emitNotificationsChanged(next.unreadCount);
+  }, []);
+
   const load = useCallback(async () => {
     setError("");
     try {
-      setData(await apiFetch<NotificationResponse>("/api/notifications"));
+      applyData(await apiFetch<NotificationResponse>("/api/notifications"));
     } catch (err) {
       setError((err as Error).message);
     }
-  }, []);
+  }, [applyData]);
 
   useEffect(() => {
     void load();
@@ -48,13 +56,16 @@ export default function NotificationsPage() {
     setBusy(true);
     setError("");
     try {
-      await apiFetch("/api/notifications", {
+      // The API returns the refreshed list and count, so the UI and the header
+      // bell cannot disagree after a successful mark-read.
+      const result = await apiFetch<MarkReadResponse>("/api/notifications", {
         method: "PATCH",
         body: JSON.stringify(payload),
       });
-      await load();
+      applyData(result);
     } catch (err) {
       setError((err as Error).message);
+      await load();
     } finally {
       setBusy(false);
     }

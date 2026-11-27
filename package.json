@@ -13,6 +13,7 @@
     "db:seed": "tsx supabase/seed/seed.ts",
     "db:accounts": "tsx supabase/seed/accounts.ts",
     "db:bucket": "tsx supabase/seed/storage-bucket.ts",
+    "email:template": "node scripts/apply-email-template.mjs",
     "build:cf": "opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",

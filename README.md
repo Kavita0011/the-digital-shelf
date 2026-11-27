@@ -42,7 +42,9 @@ Sellers can upload but **never publish directly**: every file is validated by ma
 │   ├── migrations/0008_account_controls.sql soft account deletion controls
 │   ├── migrations/0009_product_taxonomy.sql content_type values and category refresh
 │   ├── migrations/0010_workflow_fixes.sql atomic view-count RPC and credit spend type
-│   ├── ALL_MIGRATIONS_COMBINED.sql    all migrations 0001-0010 in numeric order
+│   ├── migrations/0011_session_limits.sql service-role session list/revoke/cap RPCs
+│   ├── migrations/0012_notification_coverage.sql payment/refund/dispute/admin triggers
+│   ├── ALL_MIGRATIONS_COMBINED.sql    all migrations 0001-0012 in numeric order
 │   └── seed/seed.ts                  demo users, seller, products, audit entry
 ├── .env.example
 ├── package.json
@@ -106,7 +108,7 @@ DEMO_PASSWORD='a-strong-demo-password' npm run db:seed
 
 `db:accounts` reads `ADMIN_PASSWORD`, `ADMIN_TEST_PASSWORD`, and `TEST_PASSWORD` from `.env.local`; it never prints passwords. It creates/repairs `thedigitalshelf.admin@gmail.com` (super admin), `testadmin@example.com` (admin), `testuser@example.com` (buyer), and `testseller@example.com` (seller). It also gives the super-admin account an approved preview seller profile so **View mode → Seller** opens the seller dashboard correctly.
 
-If you manage migrations manually, apply the SQL files in `supabase/migrations/` in numeric order (`0001`–`0010`), or apply `supabase/ALL_MIGRATIONS_COMBINED.sql`, which contains the same files verbatim in that order. `0003_security_fixes.sql` removes client-controlled role assignment from the auth trigger, adds atomic coupon/credit RPCs, and lets a single payment intent cover a multi-item cart. `0004_public_column_privileges.sql` restricts the anon key to public-only product/category columns, so a direct `select=*` REST call cannot read internal fields such as rejection notes or file checksums. `0005_webhook_idempotency.sql` makes credit redemption and payment recording safe to retry. `0006_cloudflare_scan_queue.sql` adds the VirusTotal analysis id used by the background scan queue. `0007_notifications.sql` adds DB-triggered notifications; `0008_account_controls.sql` adds soft account deletion; `0009_product_taxonomy.sql` adds `content_type` and the buyer-facing categories (already applied); `0010_workflow_fixes.sql` adds the atomic `increment_view_count()` RPC and a dedicated `spend` credit transaction type for checkout redemptions.
+If you manage migrations manually, apply the SQL files in `supabase/migrations/` in numeric order (`0001`–`0012`), or apply `supabase/ALL_MIGRATIONS_COMBINED.sql`, which contains the same files verbatim in that order. `0003_security_fixes.sql` removes client-controlled role assignment from the auth trigger, adds atomic coupon/credit RPCs, and lets a single payment intent cover a multi-item cart. `0004_public_column_privileges.sql` restricts the anon key to public-only product/category columns, so a direct `select=*` REST call cannot read internal fields such as rejection notes or file checksums. `0005_webhook_idempotency.sql` makes credit redemption and payment recording safe to retry. `0006_cloudflare_scan_queue.sql` adds the VirusTotal analysis id used by the background scan queue. `0007_notifications.sql` adds DB-triggered notifications; `0008_account_controls.sql` adds soft account deletion; `0009_product_taxonomy.sql` adds `content_type` and the buyer-facing categories (already applied); `0010_workflow_fixes.sql` adds the atomic `increment_view_count()` RPC and a dedicated `spend` credit transaction type for checkout redemptions. `0011_session_limits.sql` adds service-role-only RPCs to list, revoke and cap Supabase Auth sessions. `0012_notification_coverage.sql` adds payment, refund, dispute and admin-activity notification triggers and guards notifications against deleted users.
 
 ```bash
 npm run dev            # http://localhost:3000
@@ -187,6 +189,24 @@ update public.users
 set role = 'super_admin', status = 'active'
 where lower(email) = lower('thedigitalshelf.admin@gmail.com');
 ```
+
+### Auth email URLs and templates
+
+In Supabase **Authentication → URL Configuration**, the Site URL must be the live Worker URL (`https://the-digital-shelf.devappkavita-3d9.workers.dev`), not `http://localhost:3000`. The Site URL is the default redirect target embedded in Supabase Auth emails, so leaving it as localhost makes confirmation/reset links open a developer's machine. The redirect allow-list contains the live URL and `http://localhost:3000/**` for local development only.
+
+A branded confirmation email body is kept at `supabase/email-templates/confirm-signup.html`. Supabase's **free tier with the default email provider does not allow custom email templates** (the Management API returns `entitlement_required`, and the dashboard hides the editor). Until a custom SMTP provider is configured or the project is upgraded, Supabase's default wording is unavoidable; the production redirect link is fixed by the Site URL above. After SMTP is configured, paste that HTML into **Authentication → Emails → Confirm sign up**, or run `SUPABASE_ACCESS_TOKEN=... npm run email:template` (which PATCHes `mailer_templates_confirmation_content` via the Supabase Management API) and set the subject to `Confirm your The Digital Shelf email`. Do not add SMTP or access-token credentials to this repository.
+
+### Signed-in devices and email confirmation
+
+Each account may be signed in on **3 devices** at once. On every successful password login, `POST /api/auth/login` calls the service-role `enforce_user_session_limit()` RPC: the new session is always kept, the other sessions are ordered by last activity, and the oldest ones beyond the cap are deleted from `auth.sessions`. If enforcement fails, login fails closed and the new session is signed out. Account settings (`/buyer/settings`, `/seller/settings`, `/admin/settings`) show verification status and the active device list, with buttons to revoke one device or all other devices; the current session can only be ended with the normal logout button. Session actions are audited and CSRF-protected.
+
+Settings also include **Resend confirmation email** for unverified accounts. The recipient is taken from the signed-in Supabase user, never from client input, and resends are rate-limited to one per 5 minutes per account.
+
+### Notifications
+
+In-app alerts are generated by database triggers so they fire regardless of which API route changed the data. Coverage includes orders, card and credit payments, credit wallet changes, product moderation, reports, seller/profile changes, user status/role changes, refunds, disputes and sensitive admin activity. `0012_notification_coverage.sql` closes the payment/refund/dispute/admin-activity gaps and prevents a deleted user from failing the source transaction.
+
+`PATCH /api/notifications` is idempotent and returns the refreshed list plus unread count instead of a bare `updated: true`. The notifications page applies that response directly, and the header bell listens for the shared change event, refreshes on navigation, on tab focus and every 30 seconds while visible. This removes the stale badge and the apparent “mark read did nothing” failure.
 
 ---
 

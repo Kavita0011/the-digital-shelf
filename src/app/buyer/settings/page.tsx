@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { LogoutButton } from "@/components/logout-button";
 import { DeleteAccountButton } from "@/components/delete-account-button";
 import { SUPPORT_EMAIL, SUPPORT_EMAIL_HREF } from "@/lib/site";
+import { AccountSecurityPanel } from "@/components/account-security-panel";
 
 export const metadata = { title: "Account settings" };
 export const dynamic = "force-dynamic";
@@ -43,7 +44,7 @@ export default async function BuyerSettings() {
       </section>
 
       <section className="card mt-6 p-6">
-        <h2 className="font-semibold">Security</h2>
+        <h2 className="font-semibold">Password and account</h2>
         <p className="mt-2 text-sm text-slate-600">Use the secure reset flow to change your password. Support can help with account recovery at <a className="text-brand-600 hover:underline" href={SUPPORT_EMAIL_HREF}>{SUPPORT_EMAIL}</a>.</p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Link className="btn-ghost" href="/forgot-password">Reset password</Link>
@@ -53,6 +54,8 @@ export default async function BuyerSettings() {
           <DeleteAccountButton />
         </div>
       </section>
+
+      <AccountSecurityPanel />
     </div>
   );
 }

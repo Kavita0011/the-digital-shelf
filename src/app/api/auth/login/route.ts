@@ -6,6 +6,7 @@ import { audit } from "@/lib/audit";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertCsrf, csrfCookieOptions } from "@/lib/csrf";
 import { requestIp } from "@/lib/auth";
+import { currentSessionId, enforceSessionLimit } from "@/lib/sessions";
 import type { Role } from "@/lib/types";
 
 export const POST = route(async (req: NextRequest) => {
@@ -50,6 +51,29 @@ export const POST = route(async (req: NextRequest) => {
     );
   }
   const role = profile.role as Role;
+
+  // Keep at most MAX_SESSIONS devices signed in. The freshly created session
+  // is always preserved; the oldest other sessions are revoked. Fail closed:
+  // if the cap cannot be enforced, do not leave an uncounted session behind.
+  try {
+    const newSessionId = await currentSessionId(supabase);
+    const removed = await enforceSessionLimit(data.user.id, newSessionId);
+    if (removed > 0) {
+      await audit({
+        actorId: data.user.id,
+        actorRole: role,
+        action: "auth.session_limit_enforced",
+        targetType: "user",
+        targetId: data.user.id,
+        metadata: { removed, maxSessions: 3 },
+        ip,
+        userAgent: req.headers.get("user-agent"),
+      });
+    }
+  } catch (error) {
+    await supabase.auth.signOut();
+    throw error;
+  }
 
   await audit({
     actorId: data.user.id,

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ok, route } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import type { Notification } from "@/lib/types";
 
 const patchSchema = z
   .object({
@@ -13,25 +14,33 @@ const patchSchema = z
     message: "Provide a notification id or set all to true",
   });
 
+const NOTIFICATION_COLUMNS = "id,type,title,body,link,read_at,created_at";
+
 /** Notifications are always scoped to the signed-in user, never to a supplied id. */
-export const GET = route(async () => {
-  const user = await requireUser();
+async function loadNotifications(userId: string): Promise<{
+  notifications: Notification[];
+  unreadCount: number;
+}> {
   const db = getSupabaseAdmin();
   const [list, unread] = await Promise.all([
     db.from("notifications")
-      .select("id,type,title,body,link,read_at,created_at")
-      .eq("user_id", user.id)
+      .select(NOTIFICATION_COLUMNS)
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(100),
     db.from("notifications")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .is("read_at", null),
   ]);
   if (list.error) throw list.error;
   if (unread.error) throw unread.error;
+  return { notifications: (list.data ?? []) as Notification[], unreadCount: unread.count ?? 0 };
+}
 
-  return ok({ notifications: list.data ?? [], unreadCount: unread.count ?? 0 });
+export const GET = route(async () => {
+  const user = await requireUser();
+  return ok(await loadNotifications(user.id));
 });
 
 export const PATCH = route(async (req: NextRequest) => {
@@ -47,5 +56,10 @@ export const PATCH = route(async (req: NextRequest) => {
 
   const { error } = await query;
   if (error) throw error;
-  return ok({ updated: true });
+
+  // Return fresh state so the caller never has to guess whether the badge or
+  // row highlight changed. This also makes "mark read" idempotent: marking an
+  // already-read row simply returns the current list.
+  const result = await loadNotifications(user.id);
+  return ok({ updated: true, ...result });
 });

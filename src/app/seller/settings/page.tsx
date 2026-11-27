@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { LogoutButton } from "@/components/logout-button";
 import { DeleteAccountButton } from "@/components/delete-account-button";
 import { SUPPORT_EMAIL, SUPPORT_EMAIL_HREF } from "@/lib/site";
+import { AccountSecurityPanel } from "@/components/account-security-panel";
 
 export const metadata = { title: "Seller settings" };
 export const dynamic = "force-dynamic";
@@ -55,7 +56,7 @@ export default async function SellerSettings() {
       </section>
 
       <section className="card mt-6 p-6">
-        <h2 className="font-semibold">Security</h2>
+        <h2 className="font-semibold">Password and account</h2>
         <p className="mt-2 text-sm text-slate-600">Signed in as {user.email}. Use the secure reset flow to change your password.</p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Link className="btn-ghost" href="/forgot-password">Reset password</Link>
@@ -65,6 +66,8 @@ export default async function SellerSettings() {
           <DeleteAccountButton />
         </div>
       </section>
+
+      <AccountSecurityPanel />
     </div>
   );
 }

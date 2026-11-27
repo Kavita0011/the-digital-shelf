@@ -14,12 +14,14 @@ const EXPECTED_MIGRATIONS = [
   "0008_account_controls.sql",
   "0009_product_taxonomy.sql",
   "0010_workflow_fixes.sql",
+  "0011_session_limits.sql",
+  "0012_notification_coverage.sql",
 ];
 
 const combinedPath = join(process.cwd(), "supabase", "ALL_MIGRATIONS_COMBINED.sql");
 const migrationsDir = join(process.cwd(), "supabase", "migrations");
 
-test("all migrations 0001-0010 exist and are combined in numeric order", () => {
+test("all migrations 0001-0012 exist and are combined in numeric order", () => {
   const combined = readFileSync(combinedPath, "utf8");
   let previousIndex = -1;
 
@@ -39,4 +41,27 @@ test("combined migration file includes the new workflow RPC and credit spend typ
   assert.match(combined, /function public\.increment_view_count\(p_product_id uuid\)/);
   assert.match(combined, /'promotional_bonus', 'referral_bonus', 'reversal', 'expiry'/);
   assert.match(combined, /transaction_type in \('purchase', 'spend'\)/);
+});
+
+test("combined migration file includes the session-limit RPCs", () => {
+  const combined = readFileSync(combinedPath, "utf8");
+  const migration = readFileSync(join(migrationsDir, "0011_session_limits.sql"), "utf8");
+  assert.ok(combined.includes(migration.trim()), "0011 must be appended verbatim");
+  assert.match(combined, /function public\.enforce_user_session_limit/);
+  assert.match(combined, /revoke_user_session\(uuid, uuid\) to service_role/);
+});
+
+test("combined migration file includes payment, refund, dispute and admin notification triggers", () => {
+  const combined = readFileSync(combinedPath, "utf8");
+  const migration = readFileSync(join(migrationsDir, "0012_notification_coverage.sql"), "utf8");
+  assert.ok(combined.includes(migration.trim()), "0012 must be appended verbatim");
+  for (const trigger of [
+    "payment_notification",
+    "refund_notification",
+    "dispute_notification",
+    "admin_activity_notification",
+  ]) {
+    assert.match(combined, new RegExp(`create trigger ${trigger}`));
+  }
+  assert.match(combined, /not exists \(select 1 from public\.users where id = p_user_id\)/);
 });
