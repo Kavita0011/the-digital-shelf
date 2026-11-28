@@ -62,7 +62,8 @@ export default async function ProductDetail({ params }: { params: Promise<{ slug
         </div>
         <h1 className="mt-3 text-3xl font-bold">{product.title}</h1>
         <p className="mt-3 text-slate-600">{product.short_description}</p>
-        <p className="mt-6 text-2xl font-bold">${(Number(product.price) / 100).toFixed(2)}</p>
+        <p className="mt-6 text-2xl font-bold">{Number(product.price)} credits</p>
+        <p className="mt-1 text-xs text-slate-500">1 credit = $0.01 · Paid with credits at checkout</p>
 
         <div className="mt-4 flex flex-wrap gap-2">{(product.tags as string[]).map((t) => <span className="badge bg-slate-100" key={t}>{t}</span>)}</div>
 

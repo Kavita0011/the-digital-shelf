@@ -6,6 +6,7 @@ import { safePublicRead } from "@/lib/safe-data";
 import { PUBLIC_CATEGORY_COLUMNS } from "@/lib/public-catalog";
 import { CONTENT_TYPES, type ContentType } from "@/lib/types";
 import { UploadWizard, type InitialProduct } from "@/components/upload-wizard";
+import { canSellerEdit } from "@/lib/product-workflow";
 
 export const metadata = { title: "Edit product" };
 
@@ -25,7 +26,7 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
     .eq("seller_id", seller.id)
     .single();
   if (!product) notFound();
-  if (product.status !== "draft" && product.status !== "rejected") redirect("/seller/products");
+  if (!canSellerEdit(product.status)) redirect("/seller/products");
 
   const categories = await safePublicRead(
     (client) => client.from("categories").select(PUBLIC_CATEGORY_COLUMNS).order("name").then((r) => r.data ?? []),

@@ -15,7 +15,7 @@ export function ProductCard({ product }: { product: Record<string, unknown> }) {
         <span className="badge bg-brand-600/10 text-brand-700">{contentType}</span>
         <h3 className="mt-2 font-semibold group-hover:text-brand-600">{String(product.title)}</h3>
         <p className="mt-1 line-clamp-2 text-sm text-slate-500">{String(product.short_description)}</p>
-        <p className="mt-3 font-bold">${(Number(product.price) / 100).toFixed(2)}</p>
+        <p className="mt-3 font-bold">{Number(product.price)} credits</p>
       </div>
     </Link>
   );

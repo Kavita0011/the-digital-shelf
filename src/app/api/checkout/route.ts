@@ -5,29 +5,18 @@ import { assertCsrf } from "@/lib/csrf";
 import { requireUser, requestIp, HttpError } from "@/lib/auth";
 import { rateLimit, rateLimitByIp } from "@/lib/rate-limit";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { getStripe } from "@/lib/stripe";
 import { getServerEnv } from "@/lib/env";
 import { allocate } from "@/lib/pricing";
+import { addCreditTransaction } from "@/lib/credits";
 
+/**
+ * Product checkout is credit-only. Cards/Stripe are used only to buy credit
+ * packs in /api/credits/purchase; they are never accepted for product orders.
+ */
 const schema = z.object({
   items: z.array(z.object({ productId: z.string().uuid() })).min(1).max(20),
-  creditsToUse: z.number().int().nonnegative().default(0),
   couponCode: z.string().max(40).optional(),
-  successUrl: z.string().url().optional(),
-  cancelUrl: z.string().url().optional(),
 });
-
-/** Only allow redirects back to our own origin (no client-controlled open redirects). */
-function safeRedirect(candidate: string | undefined, fallback: string, appUrl: string): string {
-  if (!candidate) return fallback;
-  try {
-    const target = new URL(candidate);
-    if (target.origin === new URL(appUrl).origin) return target.toString();
-  } catch {
-    // fall through to the safe default
-  }
-  return fallback;
-}
 
 export const POST = route(async (req: NextRequest) => {
   assertCsrf(req);
@@ -41,11 +30,17 @@ export const POST = route(async (req: NextRequest) => {
   // NEVER trust client prices: reload everything from the database.
   const productIds = body.items.map((i) => i.productId);
   const { data: products } = await db.from("products")
-    .select("id,title,price,currency,seller_id,status,seller_profiles(stripe_connect_account_id)")
+    .select("id,title,price,currency,seller_id,status")
     .in("id", productIds).eq("status", "approved");
-  if (!products || products.length !== productIds.length) throw new HttpError(400, "One or more products are unavailable", "invalid_cart");
-  if (new Set(products.map((p) => p.currency)).size !== 1) throw new HttpError(400, "Mixed currencies are not supported", "mixed_currency");
+  if (!products || products.length !== productIds.length) {
+    throw new HttpError(400, "One or more products are unavailable", "invalid_cart");
+  }
+  if (new Set(products.map((p) => p.currency)).size !== 1) {
+    throw new HttpError(400, "Mixed currencies are not supported", "mixed_currency");
+  }
+  const currency = products[0].currency;
 
+  // Stored price integers are credits: 1 credit = $0.01.
   const prices = products.map((p) => Number(p.price));
   const subtotal = prices.reduce((sum, price) => sum + price, 0);
 
@@ -61,121 +56,120 @@ export const POST = route(async (req: NextRequest) => {
         : Math.round(subtotal * applied.percent_off / 100);
     }
   }
-  const afterDiscount = Math.max(0, subtotal - discount);
+  const totalCredits = Math.max(0, subtotal - discount);
 
-  const { data: wallet } = await db.from("credit_wallets").select("balance").eq("user_id", user.id).single();
-  const creditsUsed = Math.min(body.creditsToUse, afterDiscount, wallet?.balance ?? 0);
-  const cardAmount = afterDiscount - creditsUsed;
+  const { data: wallet, error: walletError } = await db.from("credit_wallets")
+    .select("balance").eq("user_id", user.id).single();
+  if (walletError) throw walletError;
+  if (!wallet) throw new HttpError(404, "Credit wallet not found", "not_found");
+  if (wallet.balance < totalCredits) {
+    throw new HttpError(
+      402,
+      `You need ${totalCredits} credits for this order but only have ${wallet.balance}. Buy more credits to continue.`,
+      "insufficient_credits",
+    );
+  }
 
   const { data: settings } = await db.from("settings").select("key,value");
-  const setting = (key: string) => Number(settings?.find((s) => s.key === key)?.value ?? 0);
-  const tax = Math.round(cardAmount * setting("tax_rate_percent") / 100);
-  const totalCharge = cardAmount + tax;
-  const commission = Math.round((subtotal - discount) * setting("commission_rate_percent") / 100);
+  const commissionRate = Number(settings?.find((s) => s.key === "commission_rate_percent")?.value ?? 0);
 
-  const customer = await getOrCreateStripeCustomer(user.id, user.email);
-  const stripe = getStripe();
-  const accounts = products
-    .map((p) => p.seller_profiles?.[0]?.stripe_connect_account_id as string | undefined)
-    .filter((value): value is string => Boolean(value));
-  const uniqueAccounts = [...new Set(accounts)];
-  const destination = uniqueAccounts.length === 1 ? uniqueAccounts[0] : env.STRIPE_PLATFORM_ACCOUNT_ID;
-  const lines = products.map((p) => ({
-    price_data: {
-      currency: p.currency,
-      product_data: { name: p.title },
-      unit_amount: Number(p.price),
-    },
-    quantity: 1,
-  }));
-  if (discount > 0) {
-    lines.push({ price_data: { currency: products[0].currency, product_data: { name: "Discount" }, unit_amount: -discount }, quantity: 1 });
-  }
-  if (tax > 0) {
-    lines.push({ price_data: { currency: products[0].currency, product_data: { name: "Tax" }, unit_amount: tax }, quantity: 1 });
-  }
-
-  const successUrl = safeRedirect(body.successUrl, `${env.NEXT_PUBLIC_APP_URL}/buyer/purchases?status=success`, env.NEXT_PUBLIC_APP_URL);
-  const cancelUrl = safeRedirect(body.cancelUrl, `${env.NEXT_PUBLIC_APP_URL}/cart?status=cancelled`, env.NEXT_PUBLIC_APP_URL);
-
-  let checkout;
-  if (totalCharge === 0 && creditsUsed > 0) {
-    checkout = null; // fully credit-funded; no Stripe session needed
-  } else {
-    checkout = await stripe.checkout.sessions.create({
-      mode: "payment",
-      customer,
-      line_items: lines,
-      payment_intent_data: {
-        application_fee_amount: commission,
-        transfer_data: { destination },
-        metadata: { platform: "digital_shelf" },
-      },
-      success_url: successUrl,
-      cancel_url: cancelUrl,
-      metadata: { buyerId: user.id, creditsUsed: String(creditsUsed), discount: String(discount), productIds: productIds.join(","), orderIds: "" },
-    });
-  }
-
-  // Persist pending orders with the *actual* discount/credit allocation so
-  // ledgers and financial reports reconcile with Stripe.
   const discountShares = allocate(discount, prices);
-  const creditShares = allocate(creditsUsed, prices);
-  const taxShares = allocate(tax, prices);
-  const orders = [];
+  const effectivePrices = prices.map((price, i) => Math.max(0, price - discountShares[i]));
+
+  const orders: Array<{ id: string; total_paid: number; credits_used: number }> = [];
   for (let i = 0; i < products.length; i++) {
     const p = products[i];
-    const itemTotal = prices[i] - discountShares[i] - creditShares[i] + taxShares[i];
-    const commissionCents = Math.round(prices[i] * setting("commission_rate_percent") / 100);
+    const effective = effectivePrices[i];
+    const commission = Math.round(effective * commissionRate / 100);
     const { data: order, error } = await db.from("orders").insert({
-      buyer_id: user.id, seller_id: p.seller_id, product_id: p.id,
+      buyer_id: user.id,
+      seller_id: p.seller_id,
+      product_id: p.id,
       order_number: `DS-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
-      subtotal: prices[i], discount: discountShares[i], credits_used: creditShares[i],
-      card_amount: Math.max(0, prices[i] - discountShares[i] - creditShares[i]),
-      tax: taxShares[i], total_paid: Math.max(0, itemTotal),
-      platform_commission: commissionCents,
-      seller_earnings: prices[i] - commissionCents,
+      subtotal: prices[i],
+      discount: discountShares[i],
+      credits_used: effective,
+      card_amount: 0,
+      tax: 0,
+      total_paid: effective,
+      platform_commission: commission,
+      seller_earnings: effective - commission,
       payment_status: "pending",
-      stripe_checkout_session_id: checkout?.id ?? null,
-    }).select().single();
+      stripe_checkout_session_id: null,
+      stripe_payment_intent_id: null,
+    }).select("id,total_paid,credits_used").single();
     if (error) throw error;
-    orders.push(order);
+    orders.push(order as { id: string; total_paid: number; credits_used: number });
   }
 
-  if (checkout) {
-    await stripe.checkout.sessions.update(checkout.id, {
-      metadata: { buyerId: user.id, creditsUsed: String(creditsUsed), discount: String(discount), productIds: productIds.join(","), orderIds: orders.map((o) => o.id).join(",") },
-    });
-  } else {
-    // Debit credits BEFORE granting paid access. redeem_credits() locks the
-    // wallet row and rejects overdrafts, so concurrent checkouts cannot both
-    // spend the same credits.
+  // Debit credits BEFORE granting paid access. redeem_credits() locks the
+  // wallet row and is idempotent per order, so retries cannot double-charge.
+  const debits: Array<{ orderId: string; amount: number }> = [];
+  try {
     for (let i = 0; i < orders.length; i++) {
-      if (creditShares[i] <= 0) continue;
+      const amount = Number(orders[i].credits_used);
+      if (amount <= 0) continue;
       const { error: redeemError } = await db.rpc("redeem_credits", {
         p_user_id: user.id,
-        p_amount: creditShares[i],
+        p_amount: amount,
         p_order_id: orders[i].id,
-        p_reason: "Credit-funded checkout",
+        p_reason: "Product purchase with credits",
       });
-      if (redeemError) throw redeemError;
+      if (redeemError) {
+        if (/insufficient credits/i.test(redeemError.message)) {
+          throw new HttpError(402, "Insufficient credits", "insufficient_credits");
+        }
+        throw redeemError;
+      }
+      debits.push({ orderId: orders[i].id, amount });
     }
+
+    const paidAt = new Date().toISOString();
     for (const order of orders) {
       const { error: paidError } = await db.from("orders")
-        .update({ payment_status: "paid", paid_at: new Date().toISOString() })
+        .update({ payment_status: "paid", paid_at: paidAt })
         .eq("id", order.id);
       if (paidError) throw paidError;
+
+      // A payments row makes credit spending visible in payment history and
+      // fires the payment notification trigger alongside the credit trigger.
+      const { error: paymentError } = await db.from("payments").insert({
+        order_id: order.id,
+        user_id: user.id,
+        payment_method: "credits",
+        amount: Number(order.total_paid),
+        currency,
+        credits_used: Number(order.credits_used),
+        status: "succeeded",
+      });
+      if (paymentError) throw paymentError;
     }
+  } catch (error) {
+    // A rare concurrent spend can fail partway through. Reverse any debits we
+    // already made and mark the orders failed so no paid access is granted.
+    for (const debit of debits) {
+      try {
+        await addCreditTransaction({
+          userId: user.id,
+          amount: debit.amount,
+          type: "reversal",
+          orderId: debit.orderId,
+          reason: "Checkout failed - credit debit reversed",
+        });
+      } catch (rollbackError) {
+        console.error("Failed to reverse checkout credit debit", rollbackError);
+      }
+    }
+    if (orders.length > 0) {
+      await db.from("orders")
+        .update({ payment_status: "failed" })
+        .in("id", orders.map((o) => o.id));
+    }
+    throw error;
   }
 
-  return ok({ checkoutUrl: checkout?.url ?? `${env.NEXT_PUBLIC_APP_URL}/buyer/purchases?status=credits`, orders });
+  return ok({
+    redirectUrl: `${env.NEXT_PUBLIC_APP_URL}/buyer/purchases?status=credits`,
+    orders,
+  });
 });
-
-async function getOrCreateStripeCustomer(userId: string, email: string) {
-  const db = getSupabaseAdmin();
-  const { data: profile } = await db.from("buyer_profiles").select("stripe_customer_id").eq("user_id", userId).single();
-  if (profile?.stripe_customer_id) return profile.stripe_customer_id;
-  const customer = await getStripe().customers.create({ email, metadata: { user_id: userId } });
-  await db.from("buyer_profiles").update({ stripe_customer_id: customer.id }).eq("user_id", userId);
-  return customer.id;
-}

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { contentTypeLabel } from "@/lib/types";
+import { SellerProductActions } from "@/components/seller-product-actions";
 
 export const metadata = { title: "My products" };
 
@@ -47,20 +48,12 @@ export default async function SellerProducts() {
                 <span className={`badge ${statusColors[p.status] ?? "bg-slate-100"}`}>{p.status.replace(/_/g, " ")}</span>
               </div>
               <p className="mt-1 text-sm text-slate-500">
-                {contentTypeLabel(p.content_type)} · ${(Number(p.price) / 100).toFixed(2)} · {scanLabel(p as { file_id: string | null; product_files: unknown })}
+                {contentTypeLabel(p.content_type)} · {Number(p.price)} credits · {scanLabel(p as { file_id: string | null; product_files: unknown })}
               </p>
               {p.status === "rejected" && p.rejection_reason && (
                 <p className="mt-1 text-sm text-red-600">Reason: {p.rejection_reason}</p>
               )}
-              {(p.status === "draft" || p.status === "rejected") && (
-                <Link
-                  className="btn-ghost mt-3 inline-block px-2 py-1 text-xs"
-                  href={`/seller/products/${p.id}/edit`}
-                  aria-label={`Edit and resubmit ${p.title}`}
-                >
-                  Edit &amp; resubmit
-                </Link>
-              )}
+              <SellerProductActions productId={p.id} title={p.title} status={p.status} />
             </div>
           ))}
         </div>

@@ -19,7 +19,7 @@ function readValue(row: TableRow, column: string): unknown {
 function cellValue(column: string, value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
   if (column === "content_type") return contentTypeLabel(value);
-  if (column === "price") return `$${(Number(value) / 100).toFixed(2)}`;
+  if (column === "price") return `${Number(value)} credits`;
   if (Array.isArray(value)) {
     return value.length ? value.map((v) => cellValue(column, v)).join(", ") : "—";
   }

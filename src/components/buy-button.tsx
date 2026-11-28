@@ -9,16 +9,18 @@ export function BuyButton({ productId }: { productId: string }) {
   async function buy() {
     setLoading(true); setError("");
     try {
-      const data = await apiFetch<{ checkoutUrl: string }>("/api/checkout", {
+      const data = await apiFetch<{ redirectUrl: string }>("/api/checkout", {
         method: "POST",
-        body: JSON.stringify({ items: [{ productId }], creditsToUse: 0 }),
+        body: JSON.stringify({ items: [{ productId }] }),
       });
-      window.location.href = data.checkoutUrl;
+      window.location.href = data.redirectUrl;
     } catch (e) { setError((e as Error).message); } finally { setLoading(false); }
   }
   return (
     <div className="mt-8">
-      <button className="btn w-full" onClick={buy} disabled={loading}>{loading ? "Redirecting…" : "Buy now with Stripe"}</button>
+      <button className="btn w-full" onClick={buy} disabled={loading}>
+        {loading ? "Processing…" : "Buy with credits"}
+      </button>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </div>
   );

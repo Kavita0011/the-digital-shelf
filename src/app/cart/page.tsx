@@ -41,6 +41,9 @@ export default async function CartPage({ searchParams }: { searchParams: Promise
   const stale = rows.filter((row) => row.product?.status !== "approved");
   const productIds = available.map((row) => row.productId);
   const total = available.reduce((sum, row) => sum + Number(row.product?.price ?? 0), 0);
+  const { data: wallet } = await getSupabaseAdmin().from("credit_wallets")
+    .select("balance").eq("user_id", user.id).single();
+  const balance = Number(wallet?.balance ?? 0);
 
   return (
     <div className="container-page max-w-3xl py-16">
@@ -78,14 +81,19 @@ export default async function CartPage({ searchParams }: { searchParams: Promise
               <li className="flex items-center justify-between gap-4 p-4" key={productId}>
                 <Link className="font-medium hover:text-brand-600" href={`/products/${product!.slug}`}>{product!.title}</Link>
                 <div className="flex items-center gap-4">
-                  <span className="font-semibold">${(Number(product!.price) / 100).toFixed(2)}</span>
+                  <span className="font-semibold">{Number(product!.price)} credits</span>
                   <RemoveFromCartButton productId={productId} />
                 </div>
               </li>
             ))}
           </ul>
-          <div className="mt-6 flex items-center justify-between gap-4">
-            <p className="text-lg font-bold">Total: ${(total / 100).toFixed(2)}</p>
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-lg font-bold">Total: {total} credits</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {balance} available · <Link className="text-brand-600 hover:underline" href="/buyer/credits">Buy credits</Link>
+              </p>
+            </div>
             <CheckoutButton productIds={productIds} />
           </div>
         </>

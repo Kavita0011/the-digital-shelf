@@ -5,6 +5,7 @@ import { requireUser, HttpError } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { productDraftSchema } from "@/lib/validation";
 import { audit } from "@/lib/audit";
+import { canSellerEdit } from "@/lib/product-workflow";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -30,8 +31,8 @@ export const PATCH = route(async (req: NextRequest, ctx: Ctx) => {
   if (user.role !== "seller") throw new HttpError(403, "Sellers only", "forbidden");
   const id = parseUuidParam((await ctx.params).id);
   const product = await assertOwnership(user.id, id);
-  if (!["draft", "rejected"].includes(product.status)) {
-    throw new HttpError(409, "Product cannot be edited in this state", "invalid_state");
+  if (!canSellerEdit(product.status)) {
+    throw new HttpError(409, "Product is being scanned and cannot be edited yet", "invalid_state");
   }
 
   const body = productDraftSchema.parse(normaliseBody(await req.json()));
@@ -63,4 +64,33 @@ export const PATCH = route(async (req: NextRequest, ctx: Ctx) => {
     metadata: { from: product.status, to: "draft", invalidatedFileId: product.file_id },
   });
   return ok(data);
+});
+
+/**
+ * Seller deletion is a soft delete. Hard-deleting would break order, payment
+ * and invoice history, so the product is simply removed from the shelf while
+ * all financial records remain intact.
+ */
+export const DELETE = route(async (_req: NextRequest, ctx: Ctx) => {
+  const user = await requireUser();
+  if (user.role !== "seller") throw new HttpError(403, "Sellers only", "forbidden");
+  const id = parseUuidParam((await ctx.params).id);
+  const product = await assertOwnership(user.id, id);
+
+  if (product.status !== "removed") {
+    const { error } = await getSupabaseAdmin().from("products")
+      .update({ status: "removed", rejection_reason: null })
+      .eq("id", id);
+    if (error) throw error;
+    await audit({
+      actorId: user.id,
+      actorRole: user.role,
+      action: "product.deleted",
+      targetType: "product",
+      targetId: id,
+      metadata: { from: product.status, to: "removed", softDelete: true },
+    });
+  }
+
+  return ok({ id, status: "removed" });
 });

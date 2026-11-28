@@ -30,7 +30,7 @@ export interface InitialProduct {
   categoryId: string;
   contentType: ContentType | "";
   tags: string[];
-  /** Integer minor units (cents). */
+  /** Integer credits. Storage value is the same integer (1 credit = $0.01). */
   price: number;
   currency: string;
   licenseType: "personal" | "commercial" | "extended_commercial";
@@ -56,7 +56,9 @@ function draftBody(fd: FormData) {
     categoryId: fd.get("categoryId"),
     contentType: fd.get("contentType"),
     tags: String(fd.get("tags") ?? "").split(",").map((t) => t.trim()).filter(Boolean),
-    price: Math.round(Number(fd.get("price")) * 100),
+    // The seller enters credits directly; the stored integer is already the
+    // canonical credit amount. Do not convert it through dollars.
+    price: Math.max(0, Math.round(Number(fd.get("price")))),
     currency: "usd",
     licenseType: fd.get("licenseType"),
     refundPolicy: fd.get("refundPolicy"),
@@ -201,7 +203,20 @@ export function UploadWizard({ categories, initialProduct }: { categories: Categ
         {contentType && <p className="rounded-lg bg-brand-50 p-3 text-sm text-brand-800">{CONTENT_TYPE_DESCRIPTIONS[contentType]}</p>}
         {categories.length === 0 && <p className="text-sm text-red-600">No categories are configured yet. Ask an admin to apply the category taxonomy migration.</p>}
         <div className="grid gap-4 sm:grid-cols-2">
-          <div><label className="label" htmlFor="product-price">Price (USD)</label><input className="input" id="product-price" name="price" type="number" min="0" step="0.01" required defaultValue={initialProduct ? (initialProduct.price / 100).toFixed(2) : undefined} /></div>
+          <div>
+            <label className="label" htmlFor="product-price">Price (credits)</label>
+            <input
+              className="input"
+              id="product-price"
+              name="price"
+              type="number"
+              min="0"
+              step="1"
+              required
+              defaultValue={initialProduct?.price ?? undefined}
+            />
+            <p className="mt-1 text-xs text-slate-500">Buyers pay with credits. 1 credit = $0.01.</p>
+          </div>
           <div><label className="label" htmlFor="product-tags">Tags (comma separated)</label><input className="input" id="product-tags" name="tags" placeholder="notion, budgeting, beginner" defaultValue={initialProduct?.tags.join(", ")} /></div>
         </div>
         <div>
